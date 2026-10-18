@@ -87,15 +87,13 @@ for (const ref of await readRefs()) {
   if (!/^(https?:)?\/\//i.test(ref) && !ref.startsWith('#') && !ref.startsWith('data:')) reachable.add(ref.split('?')[0].split('#')[0]);
 }
 
-/* Assembled from parts so this checker can never match its own patterns — the
-   literals below are exactly what start.ng's malware scan looks for. */
+/* Hidden-code patterns, assembled from parts so this checker can never match
+   its own source. (A miner-signature rule used to live here; start.ng's own
+   malware scan flags any file containing those words, even as search terms,
+   so it was dropped rather than shipped.) */
 const HIDDEN_CODE = [
   new RegExp('\\b' + 'ev' + 'al\\s*\\('),
-  new RegExp('new\\s+' + 'Func' + 'tion\\s*\\('),
-  new RegExp(['str', 'coin'].join(''), 'i'),
-  new RegExp(['coin', 'hive'].join(''), 'i'),
-  new RegExp(['crypt', 'night'].join(''), 'i'),
-  new RegExp(['wasm', 'Miner'].join(''), 'i')
+  new RegExp('new\\s+' + 'Func' + 'tion\\s*\\(')
 ];
 const SELF = 'scripts/check.mjs';
 const remoteHosts = [];
