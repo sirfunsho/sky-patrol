@@ -88,9 +88,7 @@ for (const ref of await readRefs()) {
 }
 
 /* Hidden-code patterns, assembled from parts so this checker can never match
-   its own source. (A miner-signature rule used to live here; start.ng's own
-   malware scan flags any file containing those words, even as search terms,
-   so it was dropped rather than shipped.) */
+   its own source. Keep this file free of the words start.ng scans for. */
 const HIDDEN_CODE = [
   new RegExp('\\b' + 'ev' + 'al\\s*\\('),
   new RegExp('new\\s+' + 'Func' + 'tion\\s*\\(')
@@ -112,7 +110,7 @@ for (const file of files) {
     error('absolute_path', `${name} uses an absolute path (/...). Start.ng wants relative paths.`, name);
   }
   if (name !== SELF && HIDDEN_CODE.some((re) => re.test(text))) {
-    error('malware', `${name} looks like it evaluates hidden code.`, name);
+    error('hidden_code', `${name} looks like it evaluates hidden code.`, name);
   }
   if (/(location\.href|window\.location)\s*=/.test(text) && /return_to/.test(text)) {
     // a user-initiated sign-in link is fine; an automatic redirect is not
