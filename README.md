@@ -29,7 +29,7 @@ cd sky-patrol
 npm start          # http://localhost:8080  (development server, not needed by start.ng)
 ```
 
-`npm start` runs a 40-line static file server from `scripts/serve.mjs`. Opening
+`npm start` runs a 40-line static file server from `.dev/serve.mjs`. Opening
 `index.html` straight from disk works too — the scripts are plain classic scripts on
 purpose, so there is no module/CORS problem.
 
