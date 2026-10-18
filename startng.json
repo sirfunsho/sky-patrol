@@ -1,0 +1,10 @@
+{
+  "leaderboard": {
+    "stats": [
+      { "key": "boss", "label": "Boss defeated", "order": "highest" },
+      { "key": "score", "label": "Score", "order": "highest" },
+      { "key": "waves", "label": "Waves cleared", "order": "highest" },
+      { "key": "time", "label": "Run time", "order": "lowest", "format": "time" }
+    ]
+  }
+}

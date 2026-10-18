@@ -1,0 +1,7 @@
+# Development only — not needed to publish the game.
+node_modules/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log

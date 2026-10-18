@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sky Patrol — a Start.ng arcade shooter</title>
+<meta name="description" content="Fly your Start.ng character through a scrolling sky, dodge meteors and enemy jets, grab weapon upgrades, clear five waves and take down the Dreadnought boss.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0e22">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div class="app">
+
+  <main class="stage" id="stage">
+    <canvas id="game" role="img" tabindex="-1" aria-label="Sky Patrol game view. Wave 1 of 5."></canvas>
+
+    <!-- In-run heads-up display -->
+    <div class="hud" id="hud" hidden>
+      <div class="hud__row">
+        <p class="pill"><span class="pill__label">Score</span><b id="hud-score">0</b></p>
+        <p class="pill"><span class="pill__label">Wave</span><b id="hud-wave">1/5</b></p>
+        <p class="pill"><span class="pill__label">Hull</span><b id="hud-hull" aria-label="Hull 3 of 3">3</b></p>
+        <p class="pill"><span class="pill__label">Time</span><b id="hud-time">0:00</b></p>
+      </div>
+      <p class="hud__gear" id="hud-gear" hidden></p>
+      <div class="hud__boss" id="hud-boss" hidden>
+        <p class="hud__boss-name">Dreadnought</p>
+        <div class="bar"><div class="bar__fill" id="hud-boss-fill"></div></div>
+      </div>
+    </div>
+
+    <button class="icon-btn hud__pause" id="btn-pause" type="button" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+        <rect x="6" y="5" width="4" height="14" rx="1.4"></rect>
+        <rect x="14" y="5" width="4" height="14" rx="1.4"></rect>
+      </svg>
+      <span class="sr-only">Pause game</span>
+    </button>
+
+    <!-- Start / hangar -->
+    <section class="screen" id="screen-start" aria-labelledby="title-start">
+      <div class="screen__inner">
+        <p class="eyebrow">Start.ng arcade</p>
+        <h1 class="title" id="title-start">Sky Patrol</h1>
+        <p class="tagline">Dodge meteors and enemy jets, grab upgrades, clear <b>5 waves</b>, then bring down the Dreadnought.</p>
+
+        <div class="hangar">
+          <fieldset class="ships">
+            <legend class="ships__legend">Choose your aircraft</legend>
+            <p class="note">Looks only — every aircraft flies, shoots and dodges the same.</p>
+            <div class="ships__grid" id="ship-grid"></div>
+          </fieldset>
+
+          <div class="pilot">
+            <canvas class="pilot__art" id="pilot-preview" width="220" height="220" role="img" aria-label="Your Start.ng character, shown as the pilot"></canvas>
+            <div class="pilot__info">
+              <h2 class="pilot__name" id="pilot-name">Pilot</h2>
+              <p class="pilot__sub" id="pilot-account">Looking up your start.ng character…</p>
+              <p class="note" id="pilot-note"></pilot-note>
+            </div>
+          </div>
+        </div>
+
+        <div class="screen__actions">
+          <button class="btn btn--primary" id="btn-start" type="button">Start run</button>
+        </div>
+
+        <details class="howto" id="controls">
+          <summary>How to play &amp; controls</summary>
+          <div class="howto__grid">
+            <div>
+              <h3>Keyboard</h3>
+              <ul>
+                <li><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> — fly</li>
+                <li>Weapons fire on their own</li>
+                <li><kbd>P</kbd> or <kbd>Esc</kbd> — pause</li>
+                <li><kbd>M</kbd> — mute sound</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Touch</h3>
+              <ul>
+                <li>Drag anywhere on the sky to steer</li>
+                <li>Tap the ❙❙ button to pause</li>
+                <li>Big buttons for start, resume and replay</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Items</h3>
+              <ul>
+                <li><b class="tag tag--weapon">Weapon</b> spread, rapid or laser for 18s</li>
+                <li><b class="tag tag--shield">Shield</b> soaks one hit</li>
+                <li><b class="tag tag--repair">Repair</b> one hull point</li>
+                <li><b class="tag tag--emp">EMP</b> clears bullets, hurts everything</li>
+                <li><b class="tag tag--star">Star</b> bonus points</li>
+              </ul>
+            </div>
+          </div>
+          <p class="note">Weapons and upgrades only last for the run you are flying — every new run starts fresh.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- Paused -->
+    <section class="screen screen--dim" id="screen-pause" hidden aria-labelledby="title-pause">
+      <div class="screen__inner">
+        <p class="eyebrow">Taking a breath</p>
+        <h2 class="title title--sm" id="title-pause">Paused</h2>
+        <p class="tagline">Nothing moves while you are away.</p>
+        <div class="btn-row">
+          <button class="btn btn--primary" id="btn-resume" type="button">Resume</button>
+          <button class="btn" id="btn-restart-pause" type="button">Restart run</button>
+          <button class="btn btn--ghost" id="btn-quit" type="button">Change aircraft</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Game over / victory -->
+    <section class="screen screen--dim" id="screen-end" hidden aria-labelledby="title-end">
+      <div class="screen__inner">
+        <p class="eyebrow" id="end-eyebrow">Run finished</p>
+        <h2 class="title title--sm" id="title-end">Shot down</h2>
+        <p class="tagline" id="end-sub"></p>
+
+        <dl class="results">
+          <div><dt>Score</dt><dd id="end-score">0</dd></div>
+          <div><dt>Waves cleared</dt><dd id="end-waves">0 / 5</dd></div>
+          <div><dt>Boss defeated</dt><dd id="end-boss">No</dd></div>
+          <div><dt>Run time</dt><dd id="end-time">0:00</dd></div>
+          <div><dt>Shootdowns</dt><dd id="end-kills">0</dd></div>
+        </dl>
+
+        <p class="save-note" id="end-save"></p>
+
+        <div class="btn-row">
+          <button class="btn btn--primary" id="btn-again" type="button">Fly again</button>
+          <button class="btn" id="btn-hangar" type="button">Change aircraft</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="panel" aria-label="Start.ng player, leaderboard and help">
+
+    <div class="startng-card" id="player-card" data-state="loading">
+      <img id="player-face" alt="" width="48" height="48">
+      <span class="startng-card__initial" id="player-initial" aria-hidden="true">S</span>
+      <div class="startng-card__id">
+        <b id="player-name">Guest</b>
+        <span id="player-account">Connecting to start.ng…</span>
+      </div>
+      <a class="startng-card__btn" id="player-signin" href="https://start.ng/" hidden>Sign in</a>
+    </div>
+
+    <section class="board" aria-labelledby="board-title">
+      <div class="board__head">
+        <h2 id="board-title">Leaderboard</h2>
+        <button class="link-btn" id="btn-board-refresh" type="button">Refresh</button>
+      </div>
+      <div class="board__scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Pilot</th>
+              <th scope="col">Boss</th>
+              <th scope="col">Score</th>
+              <th scope="col">Waves</th>
+              <th scope="col">Time</th>
+            </tr>
+          </thead>
+          <tbody id="board-rows"></tbody>
+        </table>
+      </div>
+      <p class="note" id="board-note">Loading the best runs…</p>
+    </section>
+
+    <section class="help" aria-labelledby="help-title">
+      <h2 id="help-title">Controls</h2>
+      <ul class="help__list">
+        <li><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / <kbd>WASD</kbd> fly</li>
+        <li>Weapons fire automatically</li>
+        <li><kbd>P</kbd> or <kbd>Esc</kbd> pause</li>
+        <li>Drag on the sky to steer (touch)</li>
+      </ul>
+      <p class="note">Your start.ng character sits in the cockpit of whichever aircraft you pick.</p>
+    </section>
+
+    <div class="panel__foot">
+      <button class="btn btn--ghost btn--small" id="btn-sound" type="button" aria-pressed="true">Sound: on</button>
+      <p class="note">Static game, no accounts of its own. Start.ng handles sign-in and scores.</p>
+    </div>
+
+  </aside>
+</div>
+
+<p class="sr-only" id="announcer" role="status" aria-live="polite"></p>
+
+<script src="./js/startng.js" defer></script>
+<script src="./js/audio.js" defer></script>
+<script src="./js/art.js" defer></script>
+<script src="./js/game.js" defer></script>
+</body>
+</html>

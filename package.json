@@ -1,0 +1,12 @@
+{
+  "name": "sky-patrol",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sky Patrol — a static arcade aircraft shooter for Start.ng. No runtime dependencies; these scripts are for local development only and are not needed to play.",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "cover": "node scripts/make-cover.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node scripts/check.mjs"
+  }
+}
