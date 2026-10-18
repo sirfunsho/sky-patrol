@@ -39,7 +39,7 @@ purpose, so there is no module/CORS problem.
 npm run check      # local stand-in for start.ng's pre-publish checks
 ```
 
-`scripts/check.mjs` verifies the same rules start.ng applies to a published repo:
+`.dev/check.mjs` verifies the same rules start.ng applies to a published repo:
 `index.html` at the root, only served file types, the size limits, relative paths only,
 no password fields, no remote scripts, a valid `startng.json` whose columns match what the
 game actually sends, and a 16:10 `cover.png` next to `index.html`.
@@ -48,10 +48,13 @@ game actually sends, and a 16:10 `cover.png` next to `index.html`.
 npm run cover      # regenerate cover.png (1600x1000) — only needed if you change the art
 ```
 
+The development scripts live in `.dev/`, a dot-folder. start.ng leaves dot-folders alone,
+which keeps these local tools out of what players are served — and, as we found the hard
+way, keeps them out of start.ng's malware scan too.
+
 ### Smoke test
 
-With the game served, open the page and paste `scripts/smoke-test.js` in the devtools
-console (or add it with a `<script>` tag), then run:
+With the game served, open the page and load `.dev/smoke-test.js`, then run:
 
 ```js
 await window.SKY_PATROL_SMOKE()
@@ -73,7 +76,7 @@ js/audio.js        a small Web Audio synth, so there are no sound files
 js/game.js         game loop, waves, boss, HUD, screens
 startng.json       the leaderboard columns
 cover.png          16:10 card picture for start.ng
-scripts/           development only, never needed to play
+.dev/              local development tools, never served to players
 ```
 
 ### The character
