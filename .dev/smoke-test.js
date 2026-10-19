@@ -57,6 +57,31 @@ window.SKY_PATROL_SMOKE = async function () {
     return heads.join('|') === '#|Pilot|Score|Waves|Kills|Time';
   })());
 
+  /* Signing in has to be reachable from the title screen. It used to live only
+     in the sidebar, below the whole game, which on a phone meant a player had
+     to scroll past the stage to find it. */
+  var pilotSignin = document.getElementById('pilot-signin');
+  var identity = SP.StartNG.identity;
+  check('the title screen has a sign-in control', !!pilotSignin);
+  check('it is offered to anyone who is not signed in',
+    !!pilotSignin && !pilotSignin.hidden,
+    pilotSignin ? 'hidden=' + pilotSignin.hidden : 'missing');
+  check('it either signs in or offers a retry',
+    !!pilotSignin && /sign in|checking/i.test(pilotSignin.textContent),
+    pilotSignin ? '"' + pilotSignin.textContent + '"' : 'missing');
+  check('it points back to this game after signing in',
+    !!pilotSignin && (identity.pending
+      ? pilotSignin.getAttribute('href') === '#'
+      : /return_to=/.test(pilotSignin.getAttribute('href') || '')),
+    pilotSignin ? pilotSignin.getAttribute('href') : 'missing');
+
+  /* A session arrives in the address and must not be left lying in it. */
+  check('no session is left sitting in the address bar',
+    !/[?&]startng_session=/.test(location.href),
+    location.href);
+  check('the start.ng layer can tell whether a session is held',
+    typeof SP.StartNG.hasSession === 'function');
+
   /* ---- 2. a whole run, from the hangar to victory ---- */
   d.setShip('pink');
   d.start();

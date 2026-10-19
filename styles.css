@@ -56,6 +56,9 @@ body {
 .app {
   min-height: 100dvh;
   display: grid;
+  /* A definite column, so a percentage width on the stage resolves against it.
+     Left to size itself, the stage came out wider than a phone screen. */
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
   align-content: start;
   gap: 16px;
@@ -488,6 +491,27 @@ body {
 .pilot__note {
   margin: 4px 0 0;
   font-size: clamp(9px, 2.4cqw, 12px);
+}
+
+/* Sign in, on the title screen, where a phone player can actually find it.
+   It used to live only in the sidebar, below the whole game. */
+.pilot__signin {
+  margin-top: 1.6cqw;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(126, 200, 255, 0.55);
+  background: rgba(126, 200, 255, 0.12);
+  color: var(--ink);
+  font-size: clamp(10px, 2.8cqw, 13px);
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.pilot__signin:hover {
+  background: rgba(126, 200, 255, 0.24);
+  border-color: var(--sky);
 }
 
 /* the offline explanation belongs in the sidebar card, not on the title screen */

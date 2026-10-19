@@ -2,7 +2,7 @@
   "leaderboard": {
     "stats": [
       { "key": "score", "label": "Score", "order": "highest" },
-      { "key": "waves", "label": "Best wave", "order": "highest" },
+      { "key": "waves", "label": "Waves cleared", "order": "highest" },
       { "key": "kills", "label": "Shootdowns", "order": "highest" },
       { "key": "time", "label": "Run time", "order": "highest", "format": "time" }
     ]

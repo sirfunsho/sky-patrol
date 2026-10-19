@@ -231,6 +231,7 @@ window.SP = window.SP || {};
     playerName: document.getElementById('player-name'),
     playerAccount: document.getElementById('player-account'),
     playerSignin: document.getElementById('player-signin'),
+    pilotSignin: document.getElementById('pilot-signin'),
     boardRows: document.getElementById('board-rows'),
     boardNote: document.getElementById('board-note'),
     btnBoardRefresh: document.getElementById('btn-board-refresh'),
@@ -1661,7 +1662,10 @@ window.SP = window.SP || {};
       setText(el.pilotNote, id.style ? 'This is your start.ng character, flying as the pilot.' : 'Your character looks like this: make one on start.ng.');
     } else if (id.status === 'guest') {
       el.playerAccount.textContent = id.account ? '@' + id.account : 'Playing as guest';
-      el.playerSignin.hidden = StartNG.guestMode;
+      /* Always offer a way in. The docs say a guest should see "the guest look
+         and a way to sign in" — hiding the button for ?guest visitors left
+         them with no way to sign in at all. */
+      el.playerSignin.hidden = false;
       setText(el.pilotName, id.name || 'Guest');
       setText(el.pilotAccount, 'Guest look from start.ng');
       setText(el.pilotNote, 'Guests can play and see the board. Sign in to save runs.');
@@ -1671,6 +1675,22 @@ window.SP = window.SP || {};
       setText(el.pilotName, id.name || 'Guest');
       setText(el.pilotAccount, 'Playing offline as the default guest');
       setText(el.pilotNote, 'Open this game on start.ng to fly as your own character.');
+    }
+
+    /* On the title screen, so a phone player does not have to scroll past the
+       whole game to find it. */
+    var signin = el.pilotSignin;
+    signin.hidden = id.signedIn;
+    if (id.signedIn) {
+      signin.textContent = 'Signed in';
+    } else if (id.pending) {
+      /* We hold a session from the sign-in redirect but start.ng has not
+         confirmed it. Say that plainly, and let them ask again. */
+      signin.textContent = 'Checking with start.ng… tap to retry';
+      signin.href = '#';
+    } else {
+      signin.textContent = 'Sign in with start.ng';
+      signin.href = StartNG.signInUrl();
     }
 
     if (id.face) {
@@ -1880,6 +1900,17 @@ window.SP = window.SP || {};
     el.btnPause.addEventListener('click', function () { Audio.play('ui'); pause(); });
     el.btnBoardRefresh.addEventListener('click', function () { Audio.play('ui'); loadBoard(); });
     el.btnSound.addEventListener('click', toggleSound);
+
+    /* The title screen sign-in control doubles as a "try again" when we hold
+       a session that start.ng has not confirmed yet. */
+    el.pilotSignin.addEventListener('click', function (e) {
+      if (StartNG.identity.signedIn) { e.preventDefault(); return; }
+      if (StartNG.identity.pending) {
+        e.preventDefault();
+        el.pilotSignin.textContent = 'Checking…';
+        StartNG.refresh().then(renderIdentity);
+      }
+    });
 
     canvas.addEventListener('pointerdown', onPointerDown);
     canvas.addEventListener('pointermove', onPointerMove);

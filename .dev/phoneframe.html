@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone frame — measures the game at handset size</title>
+<style>
+  body { margin: 0; background: #202020; font: 13px system-ui, sans-serif; color: #eee; }
+  #phone { width: 390px; height: 844px; border: 0; display: block; }
+  #report { padding: 8px 10px; white-space: pre; font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<iframe id="phone" src="../index.html"></iframe>
+<pre id="report">measuring…</pre>
+<script>
+/* Loads the game in a handset-sized frame and reports where the sign-in
+   control actually sits, so we can tell whether a player on a phone could
+   ever reach it. */
+document.getElementById('phone').addEventListener('load', function () {
+  setTimeout(function () {
+    var w = document.getElementById('phone').contentWindow;
+    var d = w.document;
+    var out = [];
+    function line(label, el) {
+      if (!el) { out.push(label + ': MISSING'); return; }
+      var r = el.getBoundingClientRect();
+      out.push(label + ': top=' + Math.round(r.top) + ' bottom=' + Math.round(r.bottom) +
+        ' left=' + Math.round(r.left) + ' w=' + Math.round(r.width) +
+        ' hidden=' + el.hidden + ' inViewport=' + (r.top < w.innerHeight && r.bottom > 0));
+    }
+    line('stage', d.getElementById('stage'));
+    line('panel', d.querySelector('.panel'));
+    line('signin', d.getElementById('player-signin'));
+    line('pilot', d.querySelector('.pilot'));
+    out.push('viewport: ' + w.innerWidth + 'x' + w.innerHeight);
+    out.push('page scrollHeight: ' + d.documentElement.scrollHeight);
+    out.push('identity: ' + (w.SP && w.SP.StartNG.identity.status));
+    out.push('signin href: ' + (d.getElementById('player-signin') || {}).href);
+    document.getElementById('report').textContent = out.join('\n');
+    window.__phoneReport = out.join('\n');
+  }, 2500);
+});
+</script>
+</body>
+</html>
