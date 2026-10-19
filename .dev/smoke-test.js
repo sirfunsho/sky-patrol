@@ -110,6 +110,7 @@ window.SKY_PATROL_SMOKE = async function () {
   g.player.y = 620;
   g.player.vx = 0;
   g.player.vy = 0;
+  var beatenBefore = g.bossesBeaten;
   if (!g.boss) {
     g.boss = { id: 1, x: 270, y: 232, w: 236, h: 86, hp: 240, maxHp: 240, t: 0, dir: 1, speed: 105, fire: 2, fireEvery: 1.9, volley: 0, minion: 99, reward: 2000, hitFlash: 0, entering: false };
     g.phase = 'boss';
@@ -120,7 +121,11 @@ window.SKY_PATROL_SMOKE = async function () {
   check('the run continues after the Dreadnought goes down', g.state === 'playing',
     'state=' + g.state + ' phase=' + g.phase);
   check('beating it scores a bonus', g.score > scoreBefore, 'score ' + Math.round(scoreBefore) + ' -> ' + Math.round(g.score));
-  check('it is counted as beaten', g.bossesBeaten === 1, 'beaten=' + g.bossesBeaten);
+  /* Relative, because the wave 5 Dreadnought may already have fallen during the
+     god-mode barrage above — in which case this is a second one. Either way it
+     must be worth exactly one. */
+check('it is counted as beaten', g.bossesBeaten === beatenBefore + 1,
+    'beaten=' + g.bossesBeaten + ' (was ' + beatenBefore + ')');
 
   /* and wave 6 starts, then wave 10 brings another one */
   run(6, 10);
@@ -366,6 +371,64 @@ window.SKY_PATROL_SMOKE = async function () {
     wallTrial('laser', 30) === 6 && wallTrial('pulse', 30) === 6,
     '30fps: laser ' + wallTrial('laser', 30) + '/6, pulse ' + wallTrial('pulse', 30) + '/6');
 
+  /* the streak has to start at the muzzle, not trail back over the aircraft */
+  d.start();
+  d.input.pointer.active = false;
+  g.player.weapon = 'laser';
+  g.player.weaponLevel = 3;
+  g.player.weaponTime = 9999;
+  g.player.x = 270;
+  g.player.y = 640;
+  var lowestStreak = -9999;
+  for (var bf = 0; bf < 40; bf++) {
+    g.player.invuln = 99999;
+    g.spawnLeft = 0;
+    d.update(1 / 60);
+    for (var bb = 0; bb < g.bullets.length; bb++) {
+      if (g.bullets[bb].muzzle != null) lowestStreak = Math.max(lowestStreak, g.bullets[bb].muzzle);
+    }
+  }
+  check('the beam streak starts at the gun',
+    lowestStreak < g.player.y,
+    'streak reaches down to ' + Math.round(lowestStreak) + ', aircraft at ' + Math.round(g.player.y));
+
+  /* movement must ease in and coast out rather than snapping between states */
+  function rampTest() {
+    d.start();
+    d.input.pointer.active = false;
+    d.input.keys = {};
+    g.player.x = 100;
+    g.player.y = 600;
+    g.player.vx = 0;
+    g.player.vy = 0;
+    var firstFrame = 0;
+    var peak = 0;
+    for (var mv = 0; mv < 40; mv++) {
+      d.input.keys.ArrowRight = true;
+      g.player.invuln = 99999;
+      g.player.x = 100;
+      d.update(1 / 60);
+      if (mv === 0) firstFrame = g.player.vx;
+      peak = g.player.vx;
+    }
+    d.input.keys = {};
+    var coast = [];
+    for (var cv = 0; cv < 40; cv++) {
+      g.player.invuln = 99999;
+      d.update(1 / 60);
+      coast.push(Math.abs(g.player.vx));
+    }
+    d.input.keys = {};
+    return { firstFrame: firstFrame, peak: peak, coast: coast };
+  }
+  var ramp = rampTest();
+  check('movement eases in rather than snapping to full speed',
+    ramp.firstFrame > 0 && ramp.firstFrame < ramp.peak * 0.6,
+    'frame 1 at ' + Math.round(ramp.firstFrame) + ' of ' + Math.round(ramp.peak) + ' px/s');
+  check('the aircraft coasts to a stop instead of halting dead',
+    ramp.coast[0] > ramp.peak * 0.5 && ramp.coast[ramp.coast.length - 1] < ramp.peak * 0.02,
+    Math.round(ramp.peak) + ' px/s down to ' + Math.round(ramp.coast[ramp.coast.length - 1]));
+
   takeWeapon('rapid');
   var rapidL1 = boltsInVolley()[0];
   takeWeapon('rapid');
@@ -407,25 +470,24 @@ window.SKY_PATROL_SMOKE = async function () {
   });
   check('upgrade pods draw with their marker', marked === 2);
 
-  /* weapon pods come in runs, so a level 3 is actually reachable */
+  /* weapon pods come in runs, so a level 3 is actually reachable. Driven
+     straight through the drop roller: simulating for this long meant the
+     aircraft died partway, update() short-circuited, and the test quietly
+     measured an empty sample and reported 0%. */
   d.start();
-  var seen = [];
-  var lastKind = null;
-  for (var s = 0; s < 60 * 60 * 20; s++) {
+  var kinds = [];
+  for (var s = 0; s < 500; s++) {
     g.pickups.length = 0;
-    d.update(1 / 60);
-    if (!g.pickups.length) continue;
-    var kind = g.pickups[0].kind;
-    if (WEAPON_IDS.indexOf(kind) < 0) continue;
-    if (kind === lastKind) seen.push(1);
-    else seen.push(0);
-    lastKind = kind;
+    d.spawnPickup();
+    var kind = g.pickups.length ? g.pickups[0].kind : null;
+    if (WEAPON_IDS.indexOf(kind) >= 0) kinds.push(kind);
   }
-  var repeats = seen.reduce(function (a, b) { return a + b; }, 0);
-  var pairs = Math.max(1, seen.length - 1);
-  var repeatRate = repeats / pairs;
-  check('weapon pods arrive in runs of the same weapon', repeatRate > 0.5,
-    Math.round(repeatRate * 100) + '% of consecutive pods repeat (uniform random would be 33%)');
+  var repeats = 0;
+  for (var t = 1; t < kinds.length; t++) if (kinds[t] === kinds[t - 1]) repeats++;
+  var repeatRate = repeats / Math.max(1, kinds.length - 1);
+  check('weapon pods arrive in runs of the same weapon',
+    kinds.length > 80 && repeatRate > 0.5,
+    Math.round(repeatRate * 100) + '% of ' + kinds.length + ' pods repeat (uniform random would be 33%)');
 
   /* ---- 7. every aircraft draws ---- */
   var ships = SP.Art.SHIPS.map(function (s) { return s.id; });

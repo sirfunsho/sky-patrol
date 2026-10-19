@@ -38,6 +38,8 @@ window.SP = window.SP || {};
      aircraft, so a thumb resting low in the frame leaves it in plain sight. */
   var STICK_MAX = 120;
   var STICK_DEAD = 12;
+  var STICK_SMOOTH = 0.05;
+  var MOVE_TAU = 0.07;
   var TOUCH_HINT_TIME = 5;
 
   /* `shots` is a fan of [angle, xOffset] pairs; `levels` are indexed by
@@ -334,6 +336,8 @@ window.SP = window.SP || {};
 
   var input = {
     keys: {},
+    stickX: 0,
+    stickY: 0,
     pointer: { active: false, id: null, type: 'mouse', held: 0, x: W / 2, y: H * 0.72, originX: W / 2, originY: H / 2 }
   };
   var TOUCH_DEVICE = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
@@ -413,40 +417,44 @@ window.SP = window.SP || {};
   function updatePlayer(dt) {
     var p = g.player;
     var prevX = p.x;
+    var targetVx = 0;
+    var targetVy = 0;
 
     if (input.pointer.active) {
-      /* Virtual stick: deflection from where the thumb first landed, mapped
-         to speed. The aircraft keeps its own place on screen, so it never has
-         to sit under a finger to be steered. */
-      var sx = input.pointer.x - input.pointer.originX;
-      var sy = input.pointer.y - input.pointer.originY;
-      var len = Math.sqrt(sx * sx + sy * sy);
+      /* Virtual stick: deflection from where the thumb first landed, mapped to
+         speed. The aircraft keeps its own place on screen, so it never has to
+         sit under a finger to be steered. The raw touch is smoothed first —
+         a thumb always trembles a little, and unsmoothed that tremble shakes
+         the whole aircraft. */
+      var rawX = input.pointer.x - input.pointer.originX;
+      var rawY = input.pointer.y - input.pointer.originY;
+      input.stickX += (rawX - input.stickX) * (1 - Math.exp(-dt / STICK_SMOOTH));
+      input.stickY += (rawY - input.stickY) * (1 - Math.exp(-dt / STICK_SMOOTH));
+
+      var len = Math.sqrt(input.stickX * input.stickX + input.stickY * input.stickY);
       var strength = len <= STICK_DEAD ? 0 : Math.min(1, (len - STICK_DEAD) / (STICK_MAX - STICK_DEAD));
       if (strength > 0) {
-        p.vx = (sx / len) * strength * PLAYER_SPEED;
-        p.vy = (sy / len) * strength * PLAYER_SPEED;
-      } else {
-        var stickDamp = Math.max(0, 1 - 9 * dt);
-        p.vx *= stickDamp;
-        p.vy *= stickDamp;
+        targetVx = (input.stickX / len) * strength * PLAYER_SPEED;
+        targetVy = (input.stickY / len) * strength * PLAYER_SPEED;
       }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
     } else {
       var ax = (isDown('right') ? 1 : 0) - (isDown('left') ? 1 : 0);
       var ay = (isDown('down') ? 1 : 0) - (isDown('up') ? 1 : 0);
       if (ax || ay) {
-        var len2 = Math.sqrt(ax * ax + ay * ay);
-        p.vx = (ax / len2) * PLAYER_SPEED;
-        p.vy = (ay / len2) * PLAYER_SPEED;
-      } else {
-        var damp = Math.max(0, 1 - 9 * dt);
-        p.vx *= damp;
-        p.vy *= damp;
+        var keyLen = Math.sqrt(ax * ax + ay * ay);
+        targetVx = (ax / keyLen) * PLAYER_SPEED;
+        targetVy = (ay / keyLen) * PLAYER_SPEED;
       }
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
     }
+
+    /* Ease towards the target rather than snapping to it. Written as an
+       exponential so it feels identical at 30fps and at 120fps, and the
+       aircraft coasts to a stop instead of halting dead. */
+    var ease = 1 - Math.exp(-dt / MOVE_TAU);
+    p.vx += (targetVx - p.vx) * ease;
+    p.vy += (targetVy - p.vy) * ease;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
 
     p.x = clamp(p.x, 26, W - 26);
     p.y = clamp(p.y, PLAYER_MIN_Y, PLAYER_MAX_Y);
@@ -473,7 +481,7 @@ window.SP = window.SP || {};
       for (var i = 0; i < w.shots.length; i++) {
         var s = w.shots[i];
         g.bullets.push({
-          id: g.nextId++, x: p.x + s[1], y: p.y - 24,
+          id: g.nextId++, x: p.x + s[1], y: p.y - 24, muzzle: p.y - 24,
           vx: Math.sin(s[0]) * w.speed, vy: -Math.cos(s[0]) * w.speed,
           dmg: w.dmg, size: w.size, color: w.color, pierce: w.pierce,
           beam: w.beam, weapon: p.weapon, hits: []
@@ -1186,24 +1194,40 @@ window.SP = window.SP || {};
   /* A laser round is a streak of light: a hard white core inside a coloured
      glow, tapering to nothing at the tail, with a bright head where it is
      burning through whatever is in front of it. */
+  /* A quad pinched shut at the tail: full width at the head, nothing at the
+     muzzle. Constant-width strokes read as a solid bar bolted to the aircraft
+     however carefully you anchor them. */
+  function taperPath(x, head, tail, halfHead, halfTail) {
+    ctx.beginPath();
+    ctx.moveTo(x - halfHead, head);
+    ctx.lineTo(x + halfHead, head);
+    ctx.lineTo(x + halfTail, tail);
+    ctx.lineTo(x - halfTail, tail);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   function drawBeamShot(b) {
+    /* The streak runs from the muzzle it was fired out of to wherever the shot
+       has got to, so it always starts at the gun and never trails back over
+       the aircraft. */
     var head = b.y;
-    var tail = b.y + 190;
+    var tail = b.muzzle == null ? b.y + 40 : b.muzzle;
     var w = b.size;
+    if (tail - head < 2) return;
 
     ctx.save();
-    ctx.lineCap = 'butt';
 
-    /* soft outer glow */
-    ctx.globalAlpha = 0.3;
-    ctx.strokeStyle = b.color;
-    ctx.lineWidth = w * 1.5;
-    ctx.beginPath();
-    ctx.moveTo(b.x, tail);
-    ctx.lineTo(b.x, head);
-    ctx.stroke();
+    /* soft outer glow, fading out before it reaches the muzzle */
+    var glow = ctx.createLinearGradient(b.x, head, b.x, tail);
+    glow.addColorStop(0, b.color);
+    glow.addColorStop(0.5, b.color);
+    glow.addColorStop(1, rgbaFade(b.color));
+    ctx.globalAlpha = 0.32;
+    ctx.fillStyle = glow;
+    taperPath(b.x, head, tail, w * 0.8, w * 0.12);
 
-    /* the streak itself, fading out behind the head */
+    /* the streak itself, white at the head and fading out behind it */
     var grad = ctx.createLinearGradient(b.x, head, b.x, tail);
     grad.addColorStop(0, '#ffffff');
     grad.addColorStop(0.18, b.color);
@@ -1211,21 +1235,13 @@ window.SP = window.SP || {};
     ctx.globalAlpha = 1;
     ctx.shadowColor = b.color;
     ctx.shadowBlur = 14;
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = Math.max(2, w * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(b.x, head);
-    ctx.lineTo(b.x, tail);
-    ctx.stroke();
+    ctx.fillStyle = grad;
+    taperPath(b.x, head, tail, w * 0.28, w * 0.05);
 
-    /* hot core */
+    /* hot core, kept to the front so the energy reads as being up ahead of you */
     ctx.shadowBlur = 6;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(1.2, w * 0.16);
-    ctx.beginPath();
-    ctx.moveTo(b.x, head + 2);
-    ctx.lineTo(b.x, tail * 0.5 + head * 0.5);
-    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    taperPath(b.x, head, head + (tail - head) * 0.45, w * 0.13, w * 0.03);
 
     /* the burning tip */
     ctx.globalAlpha = 0.9;
@@ -1415,6 +1431,8 @@ window.SP = window.SP || {};
     input.pointer.id = null;
     input.pointer.type = 'mouse';
     input.pointer.held = 0;
+    input.stickX = 0;
+    input.stickY = 0;
   }
 
   function pause() {
@@ -1831,6 +1849,7 @@ window.SP = window.SP || {};
     render: render,
     start: startRun,
     setShip: chooseShip,
+    spawnPickup: spawnPickup,
     finish: endRun
   };
 
