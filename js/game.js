@@ -267,6 +267,30 @@ window.SP = window.SP || {};
     return Math.sqrt(dx * dx + dy * dy);
   }
 
+  /* Did a shot moving from (x0,y0) to (x1,y1) pass through a circle? A fast
+     round covers 25-50px in a frame, so testing only where it ended lets it
+     jump clean over small meteors on a phone running at 30fps. */
+  function sweepHit(x0, y0, x1, y1, cx, cy, radius) {
+    var dx = x1 - x0;
+    var dy = y1 - y0;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 ? ((cx - x0) * dx + (cy - y0) * dy) / len2 : 0;
+    t = clamp(t, 0, 1);
+    var px = x0 + dx * t - cx;
+    var py = y0 + dy * t - cy;
+    return px * px + py * py <= radius * radius;
+  }
+
+  /* The Dreadnought hull, sampled along its length. */
+  function sweepHitBoss(x0, y0, x1, y1, b) {
+    var n = 5;
+    for (var i = 0; i < n; i++) {
+      var cx = b.x - b.w / 2 + (b.w * i) / (n - 1);
+      if (sweepHit(x0, y0, x1, y1, cx, b.y, b.h / 2)) return true;
+    }
+    return false;
+  }
+
   /* ------------------------------------------------------------------ *
    * state
    * ------------------------------------------------------------------ */
@@ -310,7 +334,7 @@ window.SP = window.SP || {};
 
   var input = {
     keys: {},
-    pointer: { active: false, id: null, type: 'mouse', x: W / 2, y: H * 0.72, originX: W / 2, originY: H * 0.72 }
+    pointer: { active: false, id: null, type: 'mouse', held: 0, x: W / 2, y: H * 0.72, originX: W / 2, originY: H / 2 }
   };
   var TOUCH_DEVICE = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
 
@@ -813,6 +837,7 @@ window.SP = window.SP || {};
 
     g.runTime += dt;
     if (g.touchHint > 0) g.touchHint -= dt;
+    if (input.pointer.active) input.pointer.held += dt;
     if (g.bannerTimer > 0) {
       g.bannerTimer -= dt;
       if (g.bannerTimer <= 0) g.banner = null;
@@ -841,12 +866,13 @@ window.SP = window.SP || {};
   function updateBullets(dt) {
     for (var i = g.bullets.length - 1; i >= 0; i--) {
       var b = g.bullets[i];
+      var fromX = b.x;
+      var fromY = b.y;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       if (b.y < -30 || b.x < -30 || b.x > W + 30) { g.bullets.splice(i, 1); continue; }
 
-      if (g.boss && !g.boss.entering &&
-          Math.abs(b.x - g.boss.x) < g.boss.w / 2 && Math.abs(b.y - g.boss.y) < g.boss.h / 2) {
+      if (g.boss && !g.boss.entering && sweepHitBoss(fromX, fromY, b.x, b.y, g.boss)) {
         /* a piercing beam must hit the hull once, not once per frame it
            overlaps — the hull is 86px tall and the beam moves 25px a frame */
         if (!b.pierce || b.hits.indexOf(g.boss.id) < 0) {
@@ -864,13 +890,22 @@ window.SP = window.SP || {};
         if (e.dead) continue;
         if (b.pierce && b.hits.indexOf(e.id) >= 0) continue;
         var reach = (e.kind === 'meteor' ? e.r * 0.88 : 20) + b.size;
-        if (dist(b.x, b.y, e.x, e.y) > reach) continue;
+        if (!sweepHit(fromX, fromY, b.x, b.y, e.x, e.y, reach)) continue;
 
         e.hp -= b.dmg;
         e.flash = b.beam ? 0.16 : 0.1;
         /* a beam lights up what it burns through */
-        burst(b.x, b.y, b.beam ? 9 : 3, b.beam ? b.color : b.color, b.beam ? 150 : 80, b.beam ? 3 : 2);
-        if (b.pierce) { b.hits.push(e.id); continue; }
+        burst(b.x, b.y, b.beam ? 9 : 3, b.color, b.beam ? 150 : 80, b.beam ? 3 : 2);
+
+        if (b.pierce) {
+          /* a piercing round keeps going, but anything it kills still dies —
+             without this the beam emptied an enemy's health and left it
+             sitting there, unhittable and unscored */
+          b.hits.push(e.id);
+          if (e.hp <= 0) killEnemy(e);
+          continue;
+        }
+
         g.bullets.splice(i, 1);
         if (e.hp <= 0) killEnemy(e);
         break;
@@ -1217,35 +1252,29 @@ window.SP = window.SP || {};
     return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
   }
 
-  /* The floating stick, drawn where the thumb first landed. Mouse players get
-     no stick drawn — on a desktop it is just a green disc in the way. */
+  /* A quiet marker where the thumb first landed. It fades out almost at once —
+     the aircraft moving is the real feedback, and a big pad sitting on the
+     sky just covers up what you are trying to dodge. */
   function drawStick() {
     var o = input.pointer;
     if (!o.active || o.type === 'mouse') return;
+
     var dx = clamp(o.x - o.originX, -STICK_MAX, STICK_MAX);
     var dy = clamp(o.y - o.originY, -STICK_MAX, STICK_MAX);
+    /* starts visible, then fades away within a second */
+    var fade = (1 - clamp(o.held / 0.9, 0, 1)) * 0.5;
+    if (fade <= 0.01) return;
 
     ctx.save();
-    ctx.globalAlpha = 0.55;
-    ctx.strokeStyle = '#d8fd71';
-    ctx.lineWidth = 3;
+    ctx.globalAlpha = fade;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(o.originX, o.originY, STICK_MAX, 0, Math.PI * 2);
+    ctx.arc(o.originX, o.originY, 30, 0, Math.PI * 2);
     ctx.stroke();
-
-    ctx.globalAlpha = 0.12;
-    ctx.fillStyle = '#d8fd71';
     ctx.beginPath();
-    ctx.arc(o.originX, o.originY, STICK_MAX, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.globalAlpha = 0.85;
-    ctx.shadowColor = '#d8fd71';
-    ctx.shadowBlur = 14;
-    ctx.fillStyle = '#d8fd71';
-    ctx.beginPath();
-    ctx.arc(o.originX + dx, o.originY + dy, 24, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(o.originX + dx * 0.22, o.originY + dy * 0.22, 7, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -1385,6 +1414,7 @@ window.SP = window.SP || {};
     input.pointer.active = false;
     input.pointer.id = null;
     input.pointer.type = 'mouse';
+    input.pointer.held = 0;
   }
 
   function pause() {

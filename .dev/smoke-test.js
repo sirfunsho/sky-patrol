@@ -339,6 +339,33 @@ window.SKY_PATROL_SMOKE = async function () {
     singleBeam === 1 && Math.abs(g.boss.hp - (260 - 4.2)) < 0.01,
     singleBeam + ' beam, boss at ' + (g.boss ? g.boss.hp.toFixed(2) : 'gone'));
 
+  /* a piercing round has to actually kill what it burns through */
+  function wallTrial(weapon, fps) {
+    d.start();
+    d.input.pointer.active = false;
+    g.player.weapon = weapon;
+    g.player.weaponLevel = 3;
+    g.player.weaponTime = 9999;
+    g.player.x = 270;
+    g.player.y = 780;
+    g.player.vx = 0;
+    g.player.vy = 0;
+    g.enemies.length = 0;
+    g.shots.length = 0;
+    g.bullets.length = 0;
+    for (var m = 0; m < 6; m++) {
+      g.enemies.push({ id: 1000 + m, kind: 'meteor', x: 270, y: 120 + m * 55, r: 16, vx: 0, vy: 0, rot: 0, spin: 0, hp: 2, flash: 0, hot: false, points: 10, seed: m });
+    }
+    var before = g.kills;
+    for (var f = 0; f < 3 * fps; f++) { g.player.invuln = 99999; g.spawnLeft = 0; d.update(1 / fps); }
+    return g.kills - before;
+  }
+  check('a piercing beam kills what it burns through', wallTrial('laser', 60) === 6,
+    'killed ' + wallTrial('laser', 60) + ' of 6');
+  check('shots still connect on a slow frame rate',
+    wallTrial('laser', 30) === 6 && wallTrial('pulse', 30) === 6,
+    '30fps: laser ' + wallTrial('laser', 30) + '/6, pulse ' + wallTrial('pulse', 30) + '/6');
+
   takeWeapon('rapid');
   var rapidL1 = boltsInVolley()[0];
   takeWeapon('rapid');
