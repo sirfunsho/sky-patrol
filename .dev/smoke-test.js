@@ -117,9 +117,27 @@ window.SKY_PATROL_SMOKE = async function () {
   }
   var scoreBefore = g.score;
   g.boss.hp = 0.5;
-  run(4, 10);
+
+  /* Watch the real kill frame by frame. Nothing used to clear the boss when it
+     died, so the wreck sat in the sky for the whole of the next wave looking
+     for all the world alive. */
+  var peakPartsOnDeath = 0;
+  var bossGoneAt = -1;
+  for (var di = 0; di < 60 * 4; di++) {
+    g.player.invuln = 9999;
+    d.update(1 / 60);
+    if (g.parts.length > peakPartsOnDeath) peakPartsOnDeath = g.parts.length;
+    if (bossGoneAt < 0 && g.boss === null) bossGoneAt = di;
+  }
   check('the run continues after the Dreadnought goes down', g.state === 'playing',
     'state=' + g.state + ' phase=' + g.phase);
+  check('a destroyed Dreadnought is cleared from the sky', g.boss === null,
+    'boss=' + (g.boss ? 'still there' : 'gone'));
+  check('it leaves the moment it is destroyed, not after the next wave',
+    bossGoneAt >= 0 && bossGoneAt < 30,
+    bossGoneAt < 0 ? 'never left' : 'gone ' + bossGoneAt + ' frames in');
+  check('it blows up rather than just vanishing', peakPartsOnDeath > 60,
+    peakPartsOnDeath + ' particles');
   check('beating it scores a bonus', g.score > scoreBefore, 'score ' + Math.round(scoreBefore) + ' -> ' + Math.round(g.score));
   /* Relative, because the wave 5 Dreadnought may already have fallen during the
      god-mode barrage above — in which case this is a second one. Either way it
@@ -141,10 +159,12 @@ check('it is counted as beaten', g.bossesBeaten === beatenBefore + 1,
   g.phase = 'wave';
   d.start();
 
-  /* waves keep going with no ceiling */
+  /* waves keep going with no ceiling. Waves got longer on purpose, so this gets
+     a bigger budget — it is still asserting the same thing, that nothing caps
+     the run. */
   d.start();
   g.player.invuln = 9999;
-  for (var w = 0; w < 60 * 60 * 4 && g.state === 'playing'; w++) {
+  for (var w = 0; w < 60 * 60 * 7 && g.state === 'playing'; w++) {
     steerTo(270 + Math.sin(w / 900) * 120, 600 + Math.cos(w / 1300) * 80);
     d.update(1 / 60);
   }

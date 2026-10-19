@@ -161,8 +161,10 @@ window.SP = window.SP || {};
     var ramp = t / (t + 9);
     return {
       label: n <= WAVE_NAMES.length ? WAVE_NAMES[n - 1] : 'Beyond ' + (n - WAVE_NAMES.length),
-      count: Math.min(44, 9 + Math.round(t * 1.7)),
-      gap: [Math.max(0.42, 1.5 - t * 0.085), Math.max(0.7, 2.1 - t * 0.115)],
+      /* Waves were thin: nine things at wave one, and never past forty-four.
+         Each wave should feel like a chapter rather than a queue. */
+      count: Math.min(58, 14 + Math.round(t * 2.1)),
+      gap: [Math.max(0.42, 1.35 - t * 0.07), Math.max(0.7, 1.95 - t * 0.1)],
       fighter: Math.min(0.55, 0.1 + ramp * 0.45),
       size: [Math.min(26, 14 + t * 0.7), Math.min(48, 26 + t * 1.7)],
       speed: 1 + ramp * 0.95,
@@ -324,6 +326,8 @@ window.SP = window.SP || {};
     gapTimer: 0,
     bossIntroTimer: 0,
     bossDeathTimer: 0,
+    bossBoomTimer: 0,
+    bossWreck: null,
     bossNumber: 0,
     bossesBeaten: 0,
     hudTimer: 0,
@@ -566,6 +570,7 @@ window.SP = window.SP || {};
     g.bossNumber = 0;
     g.bossesBeaten = 0;
     g.boss = null;
+    g.bossWreck = null;
     g.enemies.length = 0;
     g.bullets.length = 0;
     g.shots.length = 0;
@@ -752,7 +757,7 @@ window.SP = window.SP || {};
           showBanner('WARNING', 'Dreadnought inbound');
         } else {
           g.phase = 'gap';
-          g.gapTimer = 2.2;
+          g.gapTimer = 3.4;
         }
       }
     } else if (g.phase === 'gap') {
@@ -763,9 +768,21 @@ window.SP = window.SP || {};
       if (g.bossIntroTimer <= 0) startBoss();
     } else if (g.phase === 'bossDying') {
       g.bossDeathTimer -= dt;
+      if (g.bossWreck) {
+        g.bossBoomTimer -= dt;
+        if (g.bossBoomTimer <= 0) {
+          g.bossBoomTimer = 0.2;
+          bossExplosion(g.bossWreck, false);
+        }
+      }
       if (g.bossDeathTimer <= 0) {
+        if (g.bossWreck) {
+          bossExplosion(g.bossWreck, true);
+          Audio.play('bigExplode');
+        }
+        g.bossWreck = null;
         g.phase = 'gap';
-        g.gapTimer = 2;
+        g.gapTimer = 3;
       }
     }
   }
@@ -848,7 +865,14 @@ window.SP = window.SP || {};
 
     if (b.hp <= 0 && g.phase === 'boss') {
       g.phase = 'bossDying';
-      g.bossDeathTimer = 1.8;
+      g.bossDeathTimer = 2.4;
+      /* Keep where it died so the explosions land on the hull, then drop the
+         boss itself. Nothing was clearing it, so the wreck hung in the sky for
+         the whole of the next wave looking for all the world like it was still
+         there. */
+      g.bossWreck = { x: b.x, y: b.y, w: b.w, h: b.h };
+      g.boss = null;
+      g.bossBoomTimer = 0;
       g.bossesBeaten += 1;
       addScore(b.reward);
       showBanner('DREADNOUGHT DOWN', '+' + formatNumber(b.reward) + ' · wave ' + (g.wave + 1) + ' next');
@@ -856,6 +880,21 @@ window.SP = window.SP || {};
       shake(20);
       announce('Dreadnought ' + g.bossNumber + ' destroyed. Next wave coming.');
     }
+  }
+
+  /* The Dreadnought coming apart: one detonation on the hull, then secondary
+     blasts walking along it until it is gone. */
+  function bossExplosion(w, big) {
+    var fire = big ? 2 : 1;
+    for (var i = 0; i < fire; i++) {
+      burst(w.x + rand(-w.w / 2, w.w / 2), w.y + rand(-w.h / 2, w.h / 2),
+        big ? 40 : 14, '#ffd08a', big ? 300 : 190, big ? 5 : 3.2);
+      burst(w.x + rand(-w.w / 2, w.w / 2), w.y + rand(-w.h / 2, w.h / 2),
+        big ? 22 : 8, '#ff7a3c', big ? 210 : 150, big ? 4 : 2.6);
+      burst(w.x + rand(-w.w / 2, w.w / 2), w.y + rand(-w.h / 2, w.h / 2),
+        big ? 14 : 5, '#fff4d6', big ? 140 : 110, big ? 3 : 1.8);
+    }
+    shake(big ? 14 : 5);
   }
 
   /* ------------------------------------------------------------------ *
