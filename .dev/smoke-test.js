@@ -50,6 +50,9 @@ window.SKY_PATROL_SMOKE = async function () {
   function godMode() { g.player.invuln = 9999; }
 
   /* ---- 1. menu ---- */
+  /* Reset first, so the suite can be run more than once in the same page.
+     A previous run can leave the aircraft mid-flight. */
+  document.getElementById('btn-hangar').click();
   check('starts in the menu', g.state === 'menu', g.state);
   check('five aircraft to choose from', document.querySelectorAll('.ship input').length === 5);
   check('leaderboard columns match startng.json', (function () {
