@@ -22,7 +22,11 @@ window.SP = window.SP || {};
   var STAT_LIMIT = 1000000000;
 
   var framePromise = null;
-  var connectable = null; /* null = not tried yet, false = no Start.ng here */
+  /* The connect page only answers games served from a *.start.ng address.
+     Anywhere else — localhost, a file on disk — there is nothing to wait
+     for, so the game goes straight to guest/offline without five-second
+     stalls on every call. */
+  var ON_START_NG = /(^|\.)start\.ng$/i.test(location.hostname);
   var listeners = [];
 
   var identity = {
@@ -36,6 +40,7 @@ window.SP = window.SP || {};
   };
 
   function connectFrame() {
+    if (!ON_START_NG) return Promise.reject(new Error('not served from start.ng'));
     if (!framePromise) {
       framePromise = new Promise(function (resolve, reject) {
         var el = document.createElement('iframe');
@@ -60,10 +65,10 @@ window.SP = window.SP || {};
   }
 
   /* Sends one message and resolves with Start.ng's reply, or null when it did
-     not answer (we are not on a *.start.ng address, or we are offline). */
+     not answer. A timeout is treated as transient: a backgrounded tab, a
+     slow network or one dropped reply must not disable identity, scores and
+     the leaderboard for the rest of the session, so nothing is latched here. */
   function askStartNg(message, replyType, timeoutMs) {
-    if (connectable === false) return Promise.resolve(null);
-
     return connectFrame().then(function (el) {
       return new Promise(function (resolve) {
         var requestId = Math.random().toString(36).slice(2);
@@ -72,7 +77,6 @@ window.SP = window.SP || {};
         function done(reply) {
           clearTimeout(timer);
           window.removeEventListener('message', onMessage);
-          if (!reply) connectable = false;
           resolve(reply);
         }
 
@@ -86,7 +90,7 @@ window.SP = window.SP || {};
         el.contentWindow.postMessage(Object.assign({}, message, { requestId: requestId }), START_NG);
       });
     }).catch(function () {
-      connectable = false;
+      /* the frame itself would not load; the next call tries again */
       return null;
     });
   }
@@ -97,9 +101,10 @@ window.SP = window.SP || {};
     });
   }
 
-  /* Who is playing: the signed-in character, or Start.ng's guest look. */
+  /* Who is playing: the signed-in character, or Start.ng's guest look.
+     One dropped reply is worth a second try before giving up. */
   function refresh() {
-    return askStartNg({ type: 'startng:whoami' }, 'startng:user').then(function (reply) {
+    function apply(reply) {
       if (!reply) {
         identity.status = 'offline';
         identity.signedIn = false;
@@ -122,6 +127,11 @@ window.SP = window.SP || {};
 
       emit();
       return identity;
+    }
+
+    return askStartNg({ type: 'startng:whoami' }, 'startng:user').then(function (reply) {
+      if (reply) return apply(reply);
+      return askStartNg({ type: 'startng:whoami' }, 'startng:user').then(apply);
     });
   }
 
