@@ -50,30 +50,33 @@
     <!-- Start / hangar -->
     <section class="screen" id="screen-start" aria-labelledby="title-start">
       <div class="screen__inner">
-        <p class="eyebrow">Start.ng arcade</p>
-        <h1 class="title" id="title-start">Sky Patrol</h1>
-        <p class="tagline">Fly as far as you can. Dodge meteors and enemy jets, grab upgrades, clear
-          wave after wave — and every fifth wave brings a Dreadnought.</p>
+        <header class="masthead">
+          <p class="eyebrow">Start.ng arcade</p>
+          <h1 class="title" id="title-start">Sky Patrol</h1>
+          <p class="tagline">Dodge the meteors, stack the weapons, and see how far you
+            get. Every fifth wave brings a Dreadnought.</p>
+        </header>
 
-        <div class="hangar">
-          <fieldset class="ships">
-            <legend class="ships__legend">Choose your aircraft</legend>
-            <p class="note">Looks only — every aircraft flies, shoots and dodges the same.</p>
-            <div class="ships__grid" id="ship-grid"></div>
-          </fieldset>
-
-          <div class="pilot">
+        <div class="pilot">
+          <div class="pilot__frame">
             <canvas class="pilot__art" id="pilot-preview" width="220" height="220" role="img" aria-label="Your Start.ng character, shown as the pilot"></canvas>
-            <div class="pilot__info">
-              <h2 class="pilot__name" id="pilot-name">Pilot</h2>
-              <p class="pilot__sub" id="pilot-account">Looking up your start.ng character…</p>
-              <p class="note" id="pilot-note"></pilot-note>
-            </div>
+          </div>
+          <div class="pilot__info">
+            <p class="pilot__eyebrow">Piloting</p>
+            <h2 class="pilot__name" id="pilot-name">Pilot</h2>
+            <p class="pilot__sub" id="pilot-account">Looking up your start.ng character…</p>
+            <p class="note pilot__note" id="pilot-note"></pilot-note>
           </div>
         </div>
 
+        <fieldset class="ships">
+          <legend class="ships__legend">Choose your aircraft</legend>
+          <p class="note ships__note">Looks only — every aircraft flies the same.</p>
+          <div class="ships__strip" id="ship-grid"></div>
+        </fieldset>
+
         <div class="screen__actions">
-          <button class="btn btn--primary" id="btn-start" type="button">Start run</button>
+          <button class="btn btn--primary btn--big" id="btn-start" type="button">Start run</button>
         </div>
 
         <details class="howto" id="controls">
@@ -123,10 +126,17 @@
         <p class="eyebrow">Taking a breath</p>
         <h2 class="title title--sm" id="title-pause">Paused</h2>
         <p class="tagline">Nothing moves while you are away.</p>
-        <div class="btn-row">
-          <button class="btn btn--primary" id="btn-resume" type="button">Resume</button>
-          <button class="btn" id="btn-restart-pause" type="button">Restart run</button>
-          <button class="btn btn--ghost" id="btn-quit" type="button">Change aircraft</button>
+        <dl class="results results--mini">
+          <div><dt>Score</dt><dd id="pause-score">0</dd></div>
+          <div><dt>Wave</dt><dd id="pause-wave">1</dd></div>
+          <div><dt>Time</dt><dd id="pause-time">0:00</dd></div>
+        </dl>
+        <div class="btn-col">
+          <button class="btn btn--primary btn--big" id="btn-resume" type="button">Resume</button>
+          <div class="btn-row">
+            <button class="btn" id="btn-restart-pause" type="button">Restart run</button>
+            <button class="btn btn--ghost" id="btn-quit" type="button">Change aircraft</button>
+          </div>
         </div>
       </div>
     </section>
@@ -138,13 +148,18 @@
         <h2 class="title title--sm" id="title-end">Shot down</h2>
         <p class="tagline" id="end-sub"></p>
 
-        <dl class="results">
-          <div><dt>Score</dt><dd id="end-score">0</dd></div>
-          <div><dt>Best wave</dt><dd id="end-waves">0</dd></div>
-          <div><dt>Dreadnoughts beaten</dt><dd id="end-bosses">0</dd></div>
-          <div><dt>Run time</dt><dd id="end-time">0:00</dd></div>
-          <div><dt>Shootdowns</dt><dd id="end-kills">0</dd></div>
-        </dl>
+        <div class="results">
+          <div class="results__hero">
+            <p class="results__label">Final score</p>
+            <p class="results__score" id="end-score">0</p>
+          </div>
+          <dl class="results__grid">
+            <div><dt>Waves cleared</dt><dd id="end-waves">0</dd></div>
+            <div><dt>Dreadnoughts beaten</dt><dd id="end-bosses">0</dd></div>
+            <div><dt>Shootdowns</dt><dd id="end-kills">0</dd></div>
+            <div><dt>Run time</dt><dd id="end-time">0:00</dd></div>
+          </dl>
+        </div>
 
         <p class="save-note" id="end-save"></p>
 

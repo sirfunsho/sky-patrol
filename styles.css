@@ -330,16 +330,11 @@ body {
 
 /* ---------- hangar ---------- */
 
-.hangar {
-  width: 100%;
-  display: grid;
-  gap: 2.4cqw;
-}
-
-/* two columns only once the stage itself is wide (not the window) */
-@container (min-width: 26rem) {
-  .hangar { grid-template-columns: 1fr auto; align-items: start; }
-  .hangar > .pilot { width: clamp(130px, 24cqw, 180px); }
+.masthead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.4cqw;
 }
 
 .ships {
@@ -347,22 +342,26 @@ body {
   padding: 0;
   border: 0;
   min-width: 0;
+  width: 100%;
 }
 
 .ships__legend {
   padding: 0;
-  font-size: clamp(13px, 3.6cqw, 19px);
+  font-size: clamp(13px, 3.4cqw, 18px);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
-.ships .note { margin-top: 2px; }
+.ships__note { margin: 2px 0 0; }
 
-.ships__grid {
-  margin-top: 3cqw;
+/* Five across in one row. An auto-fit grid looked fine and read terribly: it
+   stranded the fifth aircraft on its own row, directly under the start
+   button, which read as a mistake rather than a choice. */
+.ships__strip {
+  margin-top: 2.2cqw;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(clamp(76px, 21cqw, 124px), 1fr));
-  gap: 2cqw;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1.4cqw;
 }
 
 .ship {
@@ -371,7 +370,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 2cqw;
+  padding: 2cqw 1cqw;
   border-radius: 14px;
   border: 1px solid var(--line);
   background: rgba(20, 27, 54, 0.72);
@@ -392,20 +391,30 @@ body {
 .ship canvas {
   display: block;
   width: auto;
-  max-width: min(100%, 92px);
+  max-width: min(100%, 68px);
   aspect-ratio: 1 / 1;
   margin: 0 auto;
 }
 
 .ship__name {
-  font-size: clamp(11px, 3cqw, 15px);
+  font-size: clamp(9px, 2.5cqw, 13px);
   font-weight: 700;
+  line-height: 1.15;
+  text-align: center;
+  /* two lines reserved either way, so all five cards keep the same height */
+  min-height: 2.3em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.ship__blurb {
-  font-size: clamp(9px, 2.5cqw, 12px);
-  color: var(--muted);
-  text-align: center;
+.ship__blurb { display: none; }
+
+/* bigger cards once there is genuinely room for them */
+@container (min-width: 30rem) {
+  .ships__strip { gap: 2cqw; }
+  .ship canvas { max-width: min(100%, 96px); }
+  .ship__name { font-size: clamp(12px, 2.8cqw, 15px); }
 }
 
 .ship:has(input:checked) {
@@ -416,49 +425,74 @@ body {
 
 .ship:has(input:focus-visible) { outline: 3px solid var(--sky); outline-offset: 2px; }
 
+/* Your character is the reason this is on Start.ng at all, so it gets the
+   hero position rather than being squeezed into a sidebar. */
 .pilot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 3cqw;
-  border-radius: 14px;
+  gap: 1.4cqw;
+  padding: 3.4cqw 3cqw;
+  border-radius: 18px;
   border: 1px solid var(--line);
-  background: rgba(20, 27, 54, 0.6);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(126, 200, 255, 0.14), transparent 62%),
+    rgba(20, 27, 54, 0.6);
+}
+
+.pilot__frame {
+  padding: 6px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--sky), #6f7bf0);
+  box-shadow: 0 0 0 1px rgba(126, 200, 255, 0.5), 0 12px 28px -14px rgba(126, 200, 255, 0.9);
 }
 
 .pilot__art {
-  width: clamp(90px, 22cqw, 140px);
+  display: block;
+  width: clamp(72px, 19cqw, 108px);
   height: auto;
   aspect-ratio: 1 / 1;
-  border-radius: 12px;
+  border-radius: 50%;
   background: radial-gradient(circle at 50% 30%, #26305e, #131a36);
+}
+
+.pilot__info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pilot__eyebrow {
+  margin: 0;
+  font-size: clamp(9px, 2.4cqw, 12px);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .pilot__name {
   margin: 0;
-  font-size: clamp(13px, 3.6cqw, 18px);
+  font-size: clamp(16px, 4.4cqw, 24px);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
 }
 
 .pilot__sub {
   margin: 0;
-  font-size: clamp(10px, 2.8cqw, 14px);
+  font-size: clamp(10px, 2.8cqw, 13px);
   color: var(--muted);
 }
 
-.pilot .note { margin: 0; }
+.pilot__note {
+  margin: 4px 0 0;
+  font-size: clamp(9px, 2.4cqw, 12px);
+}
 
-/* narrow stage: keep the pilot card short so the start button never covers it */
-@container (max-width: 26rem) {
-  .pilot {
-    flex-direction: row;
-    align-items: center;
-    text-align: left;
-    gap: 12px;
-    padding: 2.4cqw;
-  }
-  .pilot__art { width: clamp(60px, 15cqw, 90px); }
-  .pilot .note { display: none; }
+/* the offline explanation belongs in the sidebar card, not on the title screen */
+@container (max-width: 30rem) {
+  .pilot__note { display: none; }
 }
 
 /* ---------- how to ---------- */
@@ -557,12 +591,40 @@ kbd {
 .btn--ghost { background: transparent; }
 .btn--small { min-height: 38px; padding: 6px 14px; font-size: 13px; }
 
+/* the one action on the title screen deserves to look like it */
+.btn--big {
+  min-height: clamp(48px, 12cqw, 60px);
+  padding: 0 clamp(28px, 8cqw, 46px);
+  font-size: clamp(16px, 4.4cqw, 22px);
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+}
+
 .btn-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 2cqw;
 }
+
+/* One obvious action, then the alternatives beneath it. Left to wrap on their
+   own they came out 2 + 1, which made the single button look like an orphan. */
+.btn-col {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.6cqw;
+}
+
+.btn-col > .btn { width: 100%; }
+
+.btn-col .btn-row {
+  width: 100%;
+  gap: 1.6cqw;
+}
+
+.btn-col .btn-row > .btn { flex: 1 1 0; min-width: 0; }
 
 :where(button, a, input, summary):focus-visible {
   outline: 3px solid var(--sky);
@@ -573,32 +635,90 @@ kbd {
 
 .results {
   width: 100%;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 2cqw;
 }
 
-.results > div {
-  padding: 2cqw;
+/* The score is the thing you came to read, so it is the thing that is big. */
+.results__hero {
+  padding: 3cqw 2.4cqw;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 253, 113, 0.35);
+  background:
+    radial-gradient(120% 140% at 50% 0%, rgba(216, 253, 113, 0.12), transparent 70%),
+    rgba(24, 33, 20, 0.6);
+}
+
+.results__label {
+  margin: 0;
+  font-size: clamp(9px, 2.6cqw, 13px);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.results__score {
+  margin: 2px 0 0;
+  font-size: clamp(38px, 13cqw, 68px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #ffffff, var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* two by two, so four stats fill the row evenly. Five equal tiles left an
+   awkward short row and a label that wrapped and threw the heights out. */
+.results__grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2cqw;
+}
+
+.results__grid > div {
+  padding: 2.2cqw 1.8cqw;
   border-radius: 12px;
   background: rgba(20, 27, 54, 0.72);
   border: 1px solid var(--line);
 }
 
 .results dt {
-  font-size: clamp(9px, 2.5cqw, 13px);
+  font-size: clamp(9px, 2.5cqw, 12px);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+  line-height: 1.25;
 }
 
 .results dd {
-  margin: 2px 0 0;
-  font-size: clamp(15px, 4.4cqw, 24px);
+  margin: 4px 0 0;
+  font-size: clamp(16px, 4.6cqw, 26px);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
+
+/* three stats, so a single row rather than a stranded pair */
+.results--mini {
+  flex-direction: row;
+  gap: 1.6cqw;
+}
+
+.results--mini > div {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 2.2cqw 1.6cqw;
+  border-radius: 12px;
+  background: rgba(20, 27, 54, 0.72);
+  border: 1px solid var(--line);
+}
+
+.results--mini dd { font-size: clamp(15px, 4.2cqw, 22px); }
 
 .save-note {
   margin: 0;

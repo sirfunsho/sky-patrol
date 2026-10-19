@@ -53,6 +53,31 @@ function disc(cx, cy, radius, color, a = 1, soft = 0) {
   }
 }
 
+function ellipse(cx, cy, rx, ry, color, a = 1) {
+  const [r, g, b] = hex(color);
+  for (let yy = Math.floor(cy - ry); yy <= cy + ry; yy++) {
+    for (let xx = Math.floor(cx - rx); xx <= cx + rx; xx++) {
+      const d = Math.hypot((xx - cx) / rx, (yy - cy) / ry);
+      if (d > 1) continue;
+      blend(xx, yy, r, g, b, a);
+    }
+  }
+}
+
+/* Soft wide haze. Clouds drawn as clusters of discs read as bubbles — you can
+   see every circle edge. One wide falloff per bank reads as cloud. */
+function haze(cx, cy, w, h, color, a = 1) {
+  const [r, g, b] = hex(color);
+  for (let yy = Math.floor(cy - h); yy <= cy + h; yy++) {
+    const fy = 1 - Math.abs(yy - cy) / h;
+    for (let xx = Math.floor(cx - w); xx <= cx + w; xx++) {
+      const fx = 1 - Math.abs(xx - cx) / w;
+      const e = fy * fx * fx;
+      if (e > 0) blend(xx, yy, r, g, b, a * e);
+    }
+  }
+}
+
 function polygon(points, color, a = 1) {
   const minY = Math.max(0, Math.floor(Math.min(...points.map((p) => p[1]))));
   const maxY = Math.min(H - 1, Math.ceil(Math.max(...points.map((p) => p[1]))));
@@ -200,16 +225,13 @@ for (let i = 0; i < 420; i++) {
 disc(800, 905, 300, '#ffcf8a', 0.16, 220);
 disc(800, 905, 170, '#ffe6b0', 0.22, 140);
 
-// clouds
+// clouds — wide soft banks, kept low and clear of the type
 const r2 = rand(99);
-for (let i = 0; i < 26; i++) {
-  const cx = r2() * W;
-  const cy = 300 + r2() * 620;
-  const rad = 40 + r2() * 90;
-  const tint = r2() < 0.3 ? '#ffd6e6' : '#dfe9ff';
-  for (let p = 0; p < 5; p++) {
-    disc(cx + (r2() - 0.5) * rad * 2, cy + (r2() - 0.5) * rad * 0.7, rad * (0.5 + r2() * 0.5), tint, 0.10);
-  }
+for (let i = 0; i < 14; i++) {
+  const cx2 = r2() * W;
+  const cy2 = 470 + r2() * 480;
+  const wid = 220 + r2() * 320;
+  haze(cx2, cy2, wid, 34 + r2() * 46, r2() < 0.3 ? '#ffd6e6' : '#dfe9ff', 0.055 + r2() * 0.05);
 }
 
 // ridges
@@ -220,84 +242,95 @@ polygon([[0, H], [0, 940], [180, 890], [340, 930], [520, 866], [700, 924], [900,
 
 // speed streaks
 const r3 = rand(7);
-for (let i = 0; i < 60; i++) {
+for (let i = 0; i < 54; i++) {
   const x = r3() * W;
   const y = r3() * H;
-  const len = 30 + r3() * 120;
-  rect(x, y, 2, len, '#ffffff', 0.05 + r3() * 0.12);
+  const len = 30 + r3() * 130;
+  rect(x, y, 2, len, '#ffffff', 0.05 + r3() * 0.1);
 }
 
-// the aircraft, nose up
-const cx = 1180;
-const cy = 655;
-const plane = (points, color, a = 1) => polygon(points.map(([x, y]) => [cx + x, cy + y]), color, a);
+/* The aircraft sits hard right so the beam has a clear run up the edge of the
+   frame. Scaling the old one down here put its shots across the tagline. */
+const cx = 1352;
+const cy = 706;
+const S = 0.86;
+const plane = (points, color, a = 1) => polygon(points.map(([x, y]) => [cx + x * S, cy + y * S]), color, a);
 
 // engine flame
-plane([[-16, 210], [16, 210], [9, 272], [-9, 272]], '#ff9f43', 0.85);
-plane([[-9, 210], [9, 210], [5, 252], [-5, 252]], '#ffe9a8', 0.9);
-// wings
-plane([[-14, -40], [-240, 130], [-210, 186], [-16, 90]], '#ff8fc7');
-plane([[14, -40], [240, 130], [210, 186], [16, 90]], '#c2437f');
-// fuselage
-plane([[0, -230], [34, -120], [40, 120], [24, 210], [-24, 210], [-40, 120], [-34, -120]], '#ff8fc7');
-plane([[0, -210], [20, -110], [26, 110], [16, 200], [-16, 200], [-26, 110], [-20, -110]], '#ffd0e6');
+plane([[-14, 196], [14, 196], [7, 262], [-7, 262]], '#ff9f43', 0.8);
+plane([[-8, 196], [8, 196], [4, 244], [-4, 244]], '#ffe9a8', 0.9);
+
+// wings, swept back, darker on the away side for a bit of form
+plane([[-16, -34], [-196, 100], [-166, 140], [-16, 82]], '#ff8fc7');
+plane([[16, -34], [196, 100], [166, 140], [16, 82]], '#c2437f');
+
+// fuselage and spine
+plane([[0, -236], [29, -118], [35, 106], [21, 196], [-21, 196], [-35, 106], [-29, -118]], '#ff8fc7');
+plane([[0, -214], [16, -108], [22, 98], [12, 186], [-12, 186], [-22, 98], [-16, -108]], '#ffd0e6');
+
 // tail fins
-plane([[-24, 110], [-54, 200], [-22, 196]], '#c2437f');
-plane([[24, 110], [54, 200], [22, 196]], '#c2437f');
-// canopy with the pilot's shirt colour
-disc(cx, cy - 96, 40, '#2a1f44');
-disc(cx, cy - 96, 32, '#d8fd71');
-disc(cx, cy - 104, 18, '#8d5524');
+plane([[-20, 104], [-48, 190], [-18, 186]], '#c2437f');
+plane([[20, 104], [48, 190], [18, 186]], '#c2437f');
 
-// a couple of meteors for flavour, kept clear of the title
-disc(268, 566, 44, '#7b6a5d');
-disc(254, 554, 13, '#000000', 0.18, 8);
-disc(284, 580, 9, '#000000', 0.18, 6);
-disc(168, 736, 24, '#8a7668');
-disc(160, 730, 7, '#000000', 0.18, 5);
-disc(1476, 496, 20, '#8a7668');
+/* Cockpit: a small dark canopy with your Start.ng character in it. Drawn as a
+   full-width disc it came out looking like a single enormous eye. */
+const nx = cx;
+const ny = cy - 124 * S;
+ellipse(nx, ny, 23 * S, 42 * S, '#1b1436');
+ellipse(nx, ny - 8 * S, 15 * S, 22 * S, '#2f2358');
+ellipse(nx, ny - 16 * S, 9 * S, 9 * S, '#8d5524');            // head
+ellipse(nx, ny + 2 * S, 13 * S, 8 * S, '#d8fd71', 0.9);       // shoulders
+ellipse(nx - 9 * S, ny - 26 * S, 5 * S, 12 * S, '#ffffff', 0.28); // glass highlight
 
-// the three weapon pods, so the card shows what the game is about
-function pod(cx, cy, color, icon) {
-  disc(cx, cy, 30, '#0b1024', 0.9);
-  disc(cx, cy, 30, color, 0.18, 16);
-  for (let i = 0; i < 28; i++) {
-    const a = (i / 28) * Math.PI * 2;
-    disc(cx + Math.cos(a) * 31, cy + Math.sin(a) * 31, 1.6, color, 0.9);
+// the beam, leaving the nose and running up the right-hand edge
+function beam(x, yTop, yBot, halfTop, halfBot, color, a) {
+  polygon([[x - halfTop, yTop], [x + halfTop, yTop], [x + halfBot, yBot], [x - halfBot, yBot]], color, a);
+}
+const noseY = cy - 236 * S;
+beam(nx, 250, noseY + 6, 3, 15, '#ff5cf0', 0.22);
+beam(nx, 250, noseY + 6, 1.6, 7, '#ff5cf0', 0.8);
+beam(nx, 300, noseY + 6, 0.8, 2.6, '#ffffff', 0.95);
+
+// meteors, kept out of the type
+disc(232, 600, 46, '#7b6a5d');
+disc(216, 586, 14, '#000000', 0.18, 8);
+disc(250, 614, 10, '#000000', 0.18, 6);
+disc(120, 792, 26, '#8a7668');
+disc(111, 785, 8, '#000000', 0.18, 5);
+disc(1490, 420, 22, '#8a7668');
+disc(1480, 414, 7, '#000000', 0.18, 5);
+
+// the three weapon pods in a tidy row, well clear of everything
+function pod(pcxp, pcyp, color, icon) {
+  disc(pcxp, pcyp, 34, '#0b1024', 0.92);
+  disc(pcxp, pcyp, 34, color, 0.2, 18);
+  for (let i = 0; i < 30; i++) {
+    const a = (i / 30) * Math.PI * 2;
+    disc(pcxp + Math.cos(a) * 35, pcyp + Math.sin(a) * 35, 1.8, color, 0.9);
   }
   if (icon === 'fan') {
-    for (const dx of [-14, -7, 0, 7, 14]) {
-      for (let t = -16; t <= 16; t += 8) disc(cx + dx * 0.6 + dx * t * 0.06, cy + t, 2.4, color, 0.95);
+    for (const dx of [-16, -8, 0, 8, 16]) {
+      for (let t = -17; t <= 17; t += 8) disc(pcxp + dx * 0.6 + dx * t * 0.06, pcyp + t, 2.6, color, 0.95);
     }
   } else if (icon === 'stream') {
-    for (const dy of [-12, 0, 12]) for (let t = -15; t <= 15; t += 7.5) disc(cx + t, cy + dy, 2.6, color, 0.95);
+    for (const dy of [-13, 0, 13]) for (let t = -16; t <= 16; t += 8) disc(pcxp + t, pcyp + dy, 2.8, color, 0.95);
   } else {
-    rect(cx - 4, cy - 20, 8, 40, color, 0.35);
-    rect(cx - 2, cy - 20, 4, 40, color, 1);
-    rect(cx - 1, cy - 20, 2, 40, '#ffffff', 1);
+    beam(pcxp, pcyp - 22, pcyp + 22, 4, 4, color, 0.35);
+    beam(pcxp, pcyp - 22, pcyp + 22, 2, 2, color, 1);
+    beam(pcxp, pcyp - 22, pcyp + 22, 0.8, 0.8, '#ffffff', 1);
   }
 }
-pod(214, 512, '#ff8a3d', 'fan');
-pod(384, 452, '#a6ff7e', 'stream');
-pod(554, 512, '#ff5cf0', 'beam');
-
-// what each weapon looks like in flight
-for (const dx of [-96, -72, -48, -24, 0, 24, 48, 72, 96]) {
-  disc(1180 + dx, 528 - Math.abs(dx) * 0.18, 7, '#ff8a3d', 0.95);
-  disc(1180 + dx, 528 - Math.abs(dx) * 0.18, 3, '#ffffff', 0.9);
-}
-for (let i = 0; i < 5; i++) disc(1180, 574 - i * 42, 6, '#a6ff7e', 0.95);
-rect(1174, 452, 12, 150, '#ff5cf0', 0.3);
-rect(1177, 452, 6, 150, '#ff5cf0', 0.95);
-rect(1179, 452, 2, 150, '#ffffff', 1);
+pod(214, 792, '#ff8a3d', 'fan');
+pod(374, 792, '#a6ff7e', 'stream');
+pod(534, 792, '#ff5cf0', 'beam');
 
 // title
-const titleScale = 20;
-text('SKY PATROL', (W - textWidth('SKY PATROL', titleScale)) / 2, 180, titleScale, '#ffffff', '#0a0e22', 4);
+const titleScale = 18;
+text('SKY PATROL', (W - textWidth('SKY PATROL', titleScale)) / 2, 148, titleScale, '#ffffff', '#0a0e22', 4);
 const subScale = 6;
-text('START.NG ARCADE SHOOTER', (W - textWidth('START.NG ARCADE SHOOTER', subScale)) / 2, 340, subScale, '#d8fd71', '#0a0e22', 3);
+text('START.NG ARCADE SHOOTER', (W - textWidth('START.NG ARCADE SHOOTER', subScale)) / 2, 316, subScale, '#d8fd71', '#0a0e22', 3);
 const tagScale = 5;
-text('ENDLESS SKY - HOW FAR CAN YOU GET', (W - textWidth('ENDLESS SKY - HOW FAR CAN YOU GET', tagScale)) / 2, 402, tagScale, '#a9b4d8', '#0a0e22', 2);
+text('ENDLESS SKY - HOW FAR CAN YOU GET', (W - textWidth('ENDLESS SKY - HOW FAR CAN YOU GET', tagScale)) / 2, 380, tagScale, '#a9b4d8', '#0a0e22', 2);
 
 /* ------------------------------------------------------------------ *
  * png encoding

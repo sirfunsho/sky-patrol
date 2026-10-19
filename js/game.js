@@ -219,6 +219,9 @@ window.SP = window.SP || {};
     endTime: document.getElementById('end-time'),
     endBosses: document.getElementById('end-bosses'),
     endKills: document.getElementById('end-kills'),
+    pauseScore: document.getElementById('pause-score'),
+    pauseWave: document.getElementById('pause-wave'),
+    pauseTime: document.getElementById('pause-time'),
     endSave: document.getElementById('end-save'),
     playerCard: document.getElementById('player-card'),
     playerFace: document.getElementById('player-face'),
@@ -1472,6 +1475,10 @@ window.SP = window.SP || {};
     if (g.state !== 'playing') return;
     input.keys = {};
     resetStick();
+    /* pausing is a good moment to show where the run stands */
+    setText(el.pauseScore, formatNumber(g.score));
+    setText(el.pauseWave, String(g.wave));
+    setText(el.pauseTime, formatTime(g.runTime));
     setState('paused');
     announce('Paused.');
   }
@@ -1707,11 +1714,7 @@ window.SP = window.SP || {};
       name.className = 'ship__name';
       name.textContent = ship.name;
 
-      var blurb = document.createElement('span');
-      blurb.className = 'ship__blurb';
-      blurb.textContent = ship.blurb;
-
-      label.append(input, art, name, blurb);
+      label.append(input, art, name);
       el.shipGrid.appendChild(label);
       drawShipPreview(art);
     });
