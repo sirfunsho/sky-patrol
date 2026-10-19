@@ -956,57 +956,117 @@ window.SP = window.SP || {};
     ctx.restore();
   }
 
+  /* Each weapon has its own colour and its own icon, so a pod on the sky says
+     what it will do before you fly into it. */
   var PICKUPS = {
-    weapon: { label: 'WEAPON', color: '#ff9f43' },
-    shield: { label: 'SHIELD', color: '#5ad8ff' },
-    repair: { label: 'REPAIR', color: '#7cf07c' },
-    emp: { label: 'EMP', color: '#c58cff' },
-    star: { label: 'STAR', color: '#ffd93d' }
+    spread: { label: 'SPREAD', color: '#ff8a3d', icon: 'fan' },
+    rapid: { label: 'RAPID', color: '#a6ff7e', icon: 'stream' },
+    laser: { label: 'LASER', color: '#ff5cf0', icon: 'beam' },
+    shield: { label: 'SHIELD', color: '#5ad8ff', icon: 'shield' },
+    repair: { label: 'REPAIR', color: '#7cf07c', icon: 'cross' },
+    emp: { label: 'EMP', color: '#c58cff', icon: 'ring' },
+    star: { label: 'STAR', color: '#ffd93d', icon: 'star' }
   };
 
-  function drawPickup(ctx, p) {
-    var def = PICKUPS[p.kind] || PICKUPS.star;
-    var pulse = 0.85 + 0.15 * Math.sin((p.t || 0) * 5);
-    ctx.save();
-    ctx.translate(p.x, p.y);
-
-    ctx.save();
-    ctx.shadowColor = def.color;
-    ctx.shadowBlur = 16 * pulse;
-    ctx.fillStyle = rgba('#0b1024', 0.85);
-    roundRect(ctx, -14, -14, 28, 28, 9);
-    ctx.fill();
-    ctx.strokeStyle = def.color;
-    ctx.lineWidth = 2.4;
-    ctx.stroke();
-    ctx.restore();
-
-    ctx.fillStyle = def.color;
-    if (p.kind === 'star') {
-      starPath(ctx, 0, 0, 10, 4.5, 5);
-      ctx.fill();
-    } else if (p.kind === 'shield') {
+  var PICKUP_ICONS = {
+    /* three bolts opening out of the nose */
+    fan: function (ctx) {
+      ctx.lineWidth = 2.6;
+      ctx.lineCap = 'round';
+      [-8, 0, 8].forEach(function (dx, i) {
+        ctx.beginPath();
+        ctx.moveTo(dx * 0.25, 10);
+        ctx.lineTo(dx, -9 - (i === 1 ? 0 : 2));
+        ctx.stroke();
+      });
+    },
+    /* a fast stream of shots */
+    stream: function (ctx) {
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      for (var i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-8, i * 6);
+        ctx.lineTo(8, i * 6);
+        ctx.stroke();
+      }
+    },
+    /* one piercing beam */
+    beam: function (ctx) {
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 10);
+      ctx.lineTo(0, -10);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-7, -5);
+      ctx.lineTo(7, -5);
+      ctx.stroke();
+    },
+    shield: function (ctx) {
       poly(ctx, [[0, -11], [10, -6], [8, 5], [0, 12], [-8, 5], [-10, -6]]);
       ctx.fill();
-    } else if (p.kind === 'repair') {
+    },
+    cross: function (ctx) {
       roundRect(ctx, -3, -10, 6, 20, 2);
       ctx.fill();
       roundRect(ctx, -10, -3, 20, 6, 2);
       ctx.fill();
-    } else if (p.kind === 'emp') {
+    },
+    ring: function (ctx) {
       ctx.lineWidth = 3;
-      ctx.strokeStyle = def.color;
       ellipse(ctx, 0, 0, 10, 10);
       ctx.stroke();
       ellipse(ctx, 0, 0, 4.5, 4.5);
       ctx.stroke();
-    } else {
-      starPath(ctx, 0, 2, 9, 4, 4);
-      ctx.fill();
-      ctx.fillStyle = '#0b1024';
-      roundRect(ctx, -3, -11, 6, 10, 2);
+    },
+    star: function (ctx) {
+      starPath(ctx, 0, 0, 10, 4.5, 5);
       ctx.fill();
     }
+  };
+
+  /* opts.upgrade marks a weapon pod that would strengthen the weapon already
+     in your hands, so the run is legible from the sky. */
+  function drawPickup(ctx, p, opts) {
+    var def = PICKUPS[p.kind] || PICKUPS.star;
+    var upgrade = !!(opts && opts.upgrade);
+    var pulse = 0.85 + 0.15 * Math.sin((p.t || 0) * 5);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    if (upgrade) {
+      var halo = 0.25 + 0.2 * Math.sin((p.t || 0) * 7);
+      ctx.strokeStyle = def.color;
+      ctx.globalAlpha = Math.max(0, halo);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 25, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      /* chevrons pointing at the pod */
+      ctx.fillStyle = def.color;
+      for (var c = -1; c <= 1; c += 2) {
+        poly(ctx, [[c * 22, -8], [c * 29, 0], [c * 22, 8], [c * 19, 0]]);
+        ctx.fill();
+      }
+    }
+
+    ctx.save();
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = (upgrade ? 24 : 16) * pulse;
+    ctx.fillStyle = rgba('#0b1024', 0.85);
+    roundRect(ctx, -15, -15, 30, 30, 10);
+    ctx.fill();
+    ctx.strokeStyle = def.color;
+    ctx.lineWidth = upgrade ? 3.4 : 2.6;
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = def.color;
+    ctx.strokeStyle = def.color;
+    (PICKUP_ICONS[def.icon] || PICKUP_ICONS.star)(ctx);
     ctx.restore();
   }
 

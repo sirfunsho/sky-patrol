@@ -2,8 +2,12 @@
 
 A forward-flying arcade aircraft shooter for [start.ng](https://start.ng). You pick an
 aircraft, your start.ng character sits in the cockpit, and you fly through a scrolling sky:
-dodge meteors and enemy jets, grab weapon upgrades, clear five waves, then bring down the
-Dreadnought boss.
+dodge meteors and enemy jets, grab weapon upgrades, and see how far you get.
+
+**There is no finish line.** Waves keep coming and keep getting harder, and the run ends
+when your hull does. Every fifth wave brings a Dreadnought — beat it, score the bonus, and
+wave six starts exactly where you left off. The Dreadnoughts get bigger, tougher and
+angrier each time; the run never does.
 
 Plain HTML, CSS and JavaScript. **No build step, no dependencies, no server, no secrets.**
 Open `index.html` and it plays.
@@ -16,11 +20,58 @@ Open `index.html` and it plays.
 | — | Weapons fire on their own |
 | `P` or `Esc` | Pause / resume |
 | `M` | Mute |
-| Drag on the sky | Steer (touch) |
+| Touch anywhere | A floating stick appears under your thumb; push it to fly |
 | ❙❚ button | Pause (touch) |
+
+The stick is **velocity based**, so the aircraft keeps its own place on screen. You never
+have to put a finger on the aircraft to steer it, and your thumb can rest low in the
+frame while the aircraft flies clear above it.
 
 Five aircraft — Pink Comet, Rust Jaw, Falcon 4, Old Piston, Volt Runner. They are
 cosmetics only: every one of them flies, shoots and dodges identically.
+
+## Weapons
+
+**Pulse is the default and never expires.** Every run starts on it, and you drop back to
+it when a temporary weapon runs out.
+
+The other three are picked up as pods, each with its own colour and icon:
+
+| Weapon | Pod colour | What it does | Level 1 → 2 → 3 |
+| --- | --- | --- | --- |
+| Spread | orange | a fan of bolts | 3 → 5 → 7 bolts |
+| Rapid | green | a stream of shots | fires every 0.075s → 0.058s → 0.045s |
+| Laser | magenta | a bright beam that pierces everything in its line | 2.4 → 3.2 → 4.2 damage, and a thicker beam |
+
+- Taking the pod for the weapon you are **already holding** makes it stronger, up to
+  level 3.
+- Taking a **different** pod switches to it at level 1.
+- Either way the clock resets to a full 18 seconds, and a pod at maximum strength just
+  refreshes it.
+- The HUD shows the active weapon, its strength and the time left, and a `WEAPON OFFLINE`
+  banner appears when one expires.
+
+Balance: the first Dreadnought has 240 HP, which is about 12 seconds of a maxed Spread or
+Rapid, or roughly 8 of a maxed Laser held in its line. Later ones are bigger and tougher.
+
+Weapons never carry between runs.
+
+## How the endless ramp works
+
+`wavePlan(n)` in `js/game.js` builds each wave from a ramp value that climbs towards 1 but
+never reaches it, so difficulty keeps rising without ever becoming arithmetically
+impossible:
+
+| | wave 1 | wave 10 | wave 30 | wave 50+ |
+| --- | --- | --- | --- | --- |
+| enemies per wave | 9 | 24 | 44 (capped) | 44 (capped) |
+| gap between them | 1.5–2.1s | 0.8–1.3s | 0.42–0.7s (floored) | floored |
+| jets in the mix | 10% | 28% | 47% | 55% (capped) |
+| rock size | 14–26 | 20–40 | 26–48 (capped) | capped |
+| speed / durability | 1.0 / 1× | 1.5 / 2× | 1.9 / 4× | capped |
+
+Dreadnought `n` gets `240 + (n-1) × 95` HP, a wider hull, faster movement and tighter
+volleys, and pays `2000 × n`.
 
 ## Run it locally
 
@@ -93,14 +144,15 @@ in the side panel and carries on.
 
 ### The leaderboard
 
-`startng.json` declares four columns, in ranking order:
+`startng.json` declares four columns, in ranking order. There is no "boss defeated" column
+any more — the run is endless, so there is nothing to win:
 
 | # | Key | Label | Order |
 | --- | --- | --- | --- |
-| 1 | `boss` | Boss defeated | highest |
-| 2 | `score` | Score | highest |
-| 3 | `waves` | Waves cleared | highest |
-| 4 | `time` | Run time | lowest, shown as `m:ss` |
+| 1 | `score` | Score | highest |
+| 2 | `waves` | Best wave | highest |
+| 3 | `kills` | Shootdowns | highest |
+| 4 | `time` | Run time | highest, shown as `m:ss` |
 
 `saveRun()` sends exactly those four keys, whole numbers only, 0 to 1,000,000,000. Nothing
 else about a run is sent. Weapons and upgrades reset every run, so nothing carries over.

@@ -154,7 +154,13 @@ if (errors.every((e) => e.code !== 'no_index')) {
 }
 
 // ---------- 4. startng.json matches what the game sends ----------
-const STAT_KEYS = ['boss', 'score', 'waves', 'time'];
+/* The columns the game actually sends are read out of js/startng.js rather
+     than listed here, so the two cannot drift apart without the check
+     noticing. */
+const integration = await readFile(join(ROOT, 'js', 'startng.js'), 'utf8').catch(() => '');
+const STAT_KEYS = [...(integration.match(/var STAT_KEYS\s*=\s*\[([^\]]*)\]/) || ['', ''])[1]
+  .matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+
 let config = null;
 try {
   config = JSON.parse(await readFile(join(ROOT, 'startng.json'), 'utf8'));
@@ -162,9 +168,16 @@ try {
   error('no_config', 'No readable startng.json next to index.html, so there is no leaderboard.');
 }
 
+if (!STAT_KEYS.length) {
+  error('no_config', 'Could not read the stat keys the game sends from js/startng.js.');
+}
+
 if (config && config.leaderboard && Array.isArray(config.leaderboard.stats)) {
   const stats = config.leaderboard.stats;
   if (stats.length < 1 || stats.length > 5) error('bad_config', 'A leaderboard needs 1 to 5 stats.');
+  if (stats.length !== STAT_KEYS.length) {
+    error('bad_config', `startng.json declares ${stats.length} columns but the game sends ${STAT_KEYS.length}: ${STAT_KEYS.join(', ')}.`);
+  }
   stats.forEach((s, i) => {
     if (!/^[a-z][a-z0-9_]{0,23}$/.test(s.key)) error('bad_config', `"${s.key}" is not a valid stat key.`);
     if (s.order && !['highest', 'lowest'].includes(s.order)) error('bad_config', `"${s.key}" has an unknown order.`);
@@ -174,7 +187,6 @@ if (config && config.leaderboard && Array.isArray(config.leaderboard.stats)) {
     }
   });
 
-  const integration = await readFile(join(ROOT, 'js', 'startng.js'), 'utf8').catch(() => '');
   if (!integration.includes("'startng:whoami'")) error('no_start_ng_player', 'The game never asks start.ng who is playing.');
   if (!integration.includes("'startng:leaderboard'")) warn('no_leaderboard_read', 'The game never reads the leaderboard.');
   if (!integration.includes("'startng:score'")) error('no_score_save', 'The game never sends a run to start.ng.');

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sky Patrol — a Start.ng arcade shooter</title>
-<meta name="description" content="Fly your Start.ng character through a scrolling sky, dodge meteors and enemy jets, grab weapon upgrades, clear five waves and take down the Dreadnought boss.">
+<meta name="description" content="An endless arcade aircraft shooter for Start.ng. Fly your Start.ng character through a scrolling sky, dodge meteors and enemy jets, grab weapon upgrades and see how far you get. Every fifth wave brings a Dreadnought.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a0e22">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
@@ -25,7 +25,14 @@
         <p class="pill"><span class="pill__label">Hull</span><b id="hud-hull" aria-label="Hull 3 of 3">3</b></p>
         <p class="pill"><span class="pill__label">Time</span><b id="hud-time">0:00</b></p>
       </div>
-      <p class="hud__gear" id="hud-gear" hidden></p>
+      <p class="hud__gear" id="hud-gear" data-weapon="pulse">
+        <span class="gear__dot" aria-hidden="true"></span>
+        <b id="hud-weapon-name">PULSE</b>
+        <span class="gear__level" id="hud-weapon-level">default</span>
+        <span class="gear__time" id="hud-weapon-time"></span>
+        <span class="gear__bar" id="hud-weapon-bar" hidden><i id="hud-weapon-fill"></i></span>
+      </p>
+      <p class="hud__shield" id="hud-shield" hidden>Shield <b id="hud-shield-time">0s</b></p>
       <div class="hud__boss" id="hud-boss" hidden>
         <p class="hud__boss-name">Dreadnought</p>
         <div class="bar"><div class="bar__fill" id="hud-boss-fill"></div></div>
@@ -45,7 +52,8 @@
       <div class="screen__inner">
         <p class="eyebrow">Start.ng arcade</p>
         <h1 class="title" id="title-start">Sky Patrol</h1>
-        <p class="tagline">Dodge meteors and enemy jets, grab upgrades, clear <b>5 waves</b>, then bring down the Dreadnought.</p>
+        <p class="tagline">Fly as far as you can. Dodge meteors and enemy jets, grab upgrades, clear
+          wave after wave — and every fifth wave brings a Dreadnought.</p>
 
         <div class="hangar">
           <fieldset class="ships">
@@ -83,7 +91,8 @@
             <div>
               <h3>Touch</h3>
               <ul>
-                <li>Drag anywhere on the sky to steer</li>
+                <li>Touch anywhere: a stick appears under your thumb</li>
+                <li>Push it to fly — the aircraft stays clear of your hand</li>
                 <li>Tap the ❙❙ button to pause</li>
                 <li>Big buttons for start, resume and replay</li>
               </ul>
@@ -91,7 +100,9 @@
             <div>
               <h3>Items</h3>
               <ul>
-                <li><b class="tag tag--weapon">Weapon</b> spread, rapid or laser for 18s</li>
+                <li><b class="tag tag--spread">Spread</b> a widening fan of bolts</li>
+                <li><b class="tag tag--rapid">Rapid</b> a faster stream of shots</li>
+                <li><b class="tag tag--laser">Laser</b> a piercing beam</li>
                 <li><b class="tag tag--shield">Shield</b> soaks one hit</li>
                 <li><b class="tag tag--repair">Repair</b> one hull point</li>
                 <li><b class="tag tag--emp">EMP</b> clears bullets, hurts everything</li>
@@ -99,7 +110,9 @@
               </ul>
             </div>
           </div>
-          <p class="note">Weapons and upgrades only last for the run you are flying — every new run starts fresh.</p>
+          <p class="note"><b>Pulse</b> is your default weapon and never runs out. Every weapon pod lasts
+            18 seconds — take the <i>same</i> one again to make it stronger, up to level 3. When a weapon
+            expires you drop back to Pulse. Weapons and upgrades only last for the run you are flying.</p>
         </details>
       </div>
     </section>
@@ -127,8 +140,8 @@
 
         <dl class="results">
           <div><dt>Score</dt><dd id="end-score">0</dd></div>
-          <div><dt>Waves cleared</dt><dd id="end-waves">0 / 5</dd></div>
-          <div><dt>Boss defeated</dt><dd id="end-boss">No</dd></div>
+          <div><dt>Best wave</dt><dd id="end-waves">0</dd></div>
+          <div><dt>Dreadnoughts beaten</dt><dd id="end-bosses">0</dd></div>
           <div><dt>Run time</dt><dd id="end-time">0:00</dd></div>
           <div><dt>Shootdowns</dt><dd id="end-kills">0</dd></div>
         </dl>
@@ -166,9 +179,9 @@
             <tr>
               <th scope="col">#</th>
               <th scope="col">Pilot</th>
-              <th scope="col">Boss</th>
               <th scope="col">Score</th>
               <th scope="col">Waves</th>
+              <th scope="col">Kills</th>
               <th scope="col">Time</th>
             </tr>
           </thead>
@@ -184,7 +197,7 @@
         <li><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> / <kbd>WASD</kbd> fly</li>
         <li>Weapons fire automatically</li>
         <li><kbd>P</kbd> or <kbd>Esc</kbd> pause</li>
-        <li>Drag on the sky to steer (touch)</li>
+        <li>Touch: a floating stick appears where you press</li>
       </ul>
       <p class="note">Your start.ng character sits in the cockpit of whichever aircraft you pick.</p>
     </section>

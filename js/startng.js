@@ -15,8 +15,10 @@ window.SP = window.SP || {};
   var START_NG = 'https://start.ng';
   var TIMEOUT_MS = 5000;
 
-  /* The four leaderboard columns, in ranking order. Mirrors startng.json. */
-  var STAT_KEYS = ['boss', 'score', 'waves', 'time'];
+  /* The four leaderboard columns, in ranking order. Mirrors startng.json.
+     The run is endless, so there is no win column: score leads, then how
+     deep you got, then shootdowns, then how long you lasted. */
+  var STAT_KEYS = ['score', 'waves', 'kills', 'time'];
   var STAT_LIMIT = 1000000000;
 
   var framePromise = null;

@@ -1,4 +1,4 @@
-/* Sky Patrol — game loop, hazards, waves, boss and Start.ng wiring.
+/* Sky Patrol — game loop, hazards, endless waves and Start.ng wiring.
  *
  * Classic script on purpose: no build step, no modules, so the game also runs
  * when the folder is opened straight from disk. Everything lives in one
@@ -19,11 +19,10 @@ window.SP = window.SP || {};
 
   var W = 540;
   var H = 900;
-  var TOTAL_WAVES = 5;
   var HULL_START = 4;
   var HULL_MAX = 6;
   var INVULN_TIME = 1.9;
-  var WEAPON_TIME = 18;
+  var WEAPON_MAX_LEVEL = 3;
   var PLAYER_MIN_Y = 96;
   var PLAYER_MAX_Y = H - 60;
   var PLAYER_SPEED = 430;
@@ -34,29 +33,134 @@ window.SP = window.SP || {};
 
   var STORE_SHIP = 'sky-patrol:ship';
 
+  /* Virtual stick: the further you push from where your thumb first landed,
+     the faster the aircraft goes. Steering never depends on touching the
+     aircraft, so a thumb resting low in the frame leaves it in plain sight. */
+  var STICK_MAX = 120;
+  var STICK_DEAD = 12;
+  var TOUCH_HINT_TIME = 5;
+
+  /* `shots` is a fan of [angle, xOffset] pairs; `levels` are indexed by
+     strength, so a weapon reads clearly: what it is, and what it does at 1, 2
+     and 3. Pulse is the one permanent weapon and has a single level. */
+  function fan(count, spread) {
+    var out = [];
+    for (var i = 0; i < count; i++) {
+      var t = count === 1 ? 0 : i / (count - 1) - 0.5;
+      out.push([t * 2 * spread, 0]);
+    }
+    return out;
+  }
+
+  /* Every weapon carries how long it lasts. The beam is the riskiest, so it
+     runs for less time than the rest. */
   var WEAPONS = {
-    pulse: { name: 'Pulse', rate: 0.15, dmg: 1, shots: [[0, 0]], speed: 940, size: 4, color: '#7ef7ff', pierce: false },
-    spread: { name: 'Spread', rate: 0.19, dmg: 1, shots: [[-0.3, 0], [0, 0], [0.3, 0]], speed: 880, size: 4, color: '#ffd93d', pierce: false },
-    rapid: { name: 'Rapid', rate: 0.075, dmg: 1, shots: [[0, 0]], speed: 1000, size: 3, color: '#a6ff7e', pierce: false },
-    laser: { name: 'Laser', rate: 0.12, dmg: 2.4, shots: [[0, 0]], speed: 1500, size: 6, color: '#ff5cf0', pierce: true }
+    pulse: {
+      name: 'Pulse',
+      color: '#7ef7ff',
+      permanent: true,
+      duration: 0,
+      speed: 940,
+      levels: [
+        { rate: 0.15, dmg: 1, shots: [[0, 0]], size: 4, beam: false, pierce: false }
+      ]
+    },
+    spread: {
+      name: 'Spread',
+      color: '#ff8a3d',
+      duration: 18,
+      speed: 880,
+      levels: [
+        { rate: 0.19, dmg: 1, shots: fan(3, 0.3), size: 4, beam: false, pierce: false },
+        { rate: 0.21, dmg: 1, shots: fan(5, 0.36), size: 4, beam: false, pierce: false },
+        { rate: 0.23, dmg: 1, shots: fan(7, 0.42), size: 4, beam: false, pierce: false }
+      ]
+    },
+    rapid: {
+      name: 'Rapid',
+      color: '#a6ff7e',
+      duration: 18,
+      speed: 1000,
+      levels: [
+        { rate: 0.075, dmg: 1, shots: [[0, 0]], size: 3, beam: false, pierce: false },
+        { rate: 0.058, dmg: 1, shots: [[0, 0]], size: 3, beam: false, pierce: false },
+        { rate: 0.045, dmg: 1, shots: [[0, 0]], size: 4, beam: false, pierce: false }
+      ]
+    },
+    laser: {
+      name: 'Laser',
+      color: '#ff5cf0',
+      duration: 12,
+      speed: 1500,
+      levels: [
+        { rate: 0.12, dmg: 2.4, shots: [[0, 0]], size: 6, beam: true, pierce: true },
+        { rate: 0.12, dmg: 3.2, shots: [[0, 0]], size: 8, beam: true, pierce: true },
+        { rate: 0.12, dmg: 4.2, shots: [[0, 0]], size: 10, beam: true, pierce: true }
+      ]
+    }
   };
   var WEAPON_KEYS = ['spread', 'rapid', 'laser'];
 
-  var WAVES = [
-    { label: 'Calm skies', count: 10, gap: [1.5, 2.1], fighter: 0.1, size: [14, 26], speed: 1, hp: 1 },
-    { label: 'Rubble field', count: 14, gap: [1.25, 1.75], fighter: 0.2, size: [16, 32], speed: 1.06, hp: 1 },
-    { label: 'Jet traffic', count: 19, gap: [1.05, 1.5], fighter: 0.32, size: [18, 38], speed: 1.12, hp: 2 },
-    { label: 'Heavy metals', count: 23, gap: [0.95, 1.35], fighter: 0.4, size: [18, 42], speed: 1.2, hp: 2 },
-    { label: 'Last call', count: 27, gap: [0.85, 1.15], fighter: 0.48, size: [20, 46], speed: 1.28, hp: 3 }
+  /* The stats for the weapon currently equipped, at its current strength. */
+  function weaponStats(id, level) {
+    var def = WEAPONS[id] || WEAPONS.pulse;
+    var stats = def.levels[clamp(level, 1, def.levels.length) - 1];
+    return {
+      name: def.name,
+      color: def.color,
+      speed: def.speed,
+      duration: def.duration,
+      rate: stats.rate,
+      dmg: stats.dmg,
+      shots: stats.shots,
+      size: stats.size,
+      beam: stats.beam,
+      pierce: stats.pierce
+    };
+  }
+
+  /* A Dreadnought turns up every BOSS_EVERY cleared waves. Beating one is not
+     the end of anything — the next wave starts as soon as it goes down, and
+     the one after it is meaner than the last. */
+  var BOSS_EVERY = 5;
+
+  function bossPlan(wave) {
+    var n = Math.max(1, Math.round(wave / BOSS_EVERY));
+    var ramp = (n - 1) / (n - 1 + 6);
+    return {
+      name: 'Dreadnought',
+      hp: Math.round(240 + (n - 1) * 95),
+      w: 236 + Math.min(60, (n - 1) * 12),
+      h: 86,
+      y: 232,
+      speed: 105 + ramp * 70,
+      fireEvery: 1.9 - ramp * 0.6,
+      minionEvery: 7 - ramp * 2.2,
+      reward: 2000 * n
+    };
+  }
+
+  /* There is no finish line. Waves keep coming and keep getting harder; the
+     run ends when the hull does. `ramp` climbs towards 1 but never reaches it,
+     so the sky gets meaner and meaner without ever becoming impossible. */
+  var WAVE_NAMES = [
+    'Calm skies', 'Rubble field', 'Jet traffic', 'Heavy metals', 'Storm front',
+    'Night runners', 'Deep space', 'Blackout', 'Red alert', 'Nothing left'
   ];
 
-  var BOSS = {
-    name: 'Dreadnought',
-    hp: 220,
-    w: 236,
-    h: 86,
-    y: 232
-  };
+  function wavePlan(n) {
+    var t = n - 1;
+    var ramp = t / (t + 9);
+    return {
+      label: n <= WAVE_NAMES.length ? WAVE_NAMES[n - 1] : 'Beyond ' + (n - WAVE_NAMES.length),
+      count: Math.min(44, 9 + Math.round(t * 1.7)),
+      gap: [Math.max(0.42, 1.5 - t * 0.085), Math.max(0.7, 2.1 - t * 0.115)],
+      fighter: Math.min(0.55, 0.1 + ramp * 0.45),
+      size: [Math.min(26, 14 + t * 0.7), Math.min(48, 26 + t * 1.7)],
+      speed: 1 + ramp * 0.95,
+      hp: 1 + Math.floor(ramp * 4)
+    };
+  }
 
   /* ------------------------------------------------------------------ *
    * dom
@@ -73,6 +177,13 @@ window.SP = window.SP || {};
     hudHull: document.getElementById('hud-hull'),
     hudTime: document.getElementById('hud-time'),
     hudGear: document.getElementById('hud-gear'),
+    hudWeaponName: document.getElementById('hud-weapon-name'),
+    hudWeaponLevel: document.getElementById('hud-weapon-level'),
+    hudWeaponTime: document.getElementById('hud-weapon-time'),
+    hudWeaponBar: document.getElementById('hud-weapon-bar'),
+    hudWeaponFill: document.getElementById('hud-weapon-fill'),
+    hudShield: document.getElementById('hud-shield'),
+    hudShieldTime: document.getElementById('hud-shield-time'),
     hudBoss: document.getElementById('hud-boss'),
     hudBossFill: document.getElementById('hud-boss-fill'),
     btnPause: document.getElementById('btn-pause'),
@@ -97,8 +208,8 @@ window.SP = window.SP || {};
     endSub: document.getElementById('end-sub'),
     endScore: document.getElementById('end-score'),
     endWaves: document.getElementById('end-waves'),
-    endBoss: document.getElementById('end-boss'),
     endTime: document.getElementById('end-time'),
+    endBosses: document.getElementById('end-bosses'),
     endKills: document.getElementById('end-kills'),
     endSave: document.getElementById('end-save'),
     playerCard: document.getElementById('player-card'),
@@ -169,7 +280,6 @@ window.SP = window.SP || {};
     kills: 0,
     wave: 1,
     wavesCleared: 0,
-    won: false,
     shake: 0,
     banner: null,
     bannerTimer: 0,
@@ -179,10 +289,13 @@ window.SP = window.SP || {};
     gapTimer: 0,
     bossIntroTimer: 0,
     bossDeathTimer: 0,
+    bossNumber: 0,
+    bossesBeaten: 0,
     hudTimer: 0,
+    touchHint: TOUCH_HINT_TIME,
     player: {
       x: W / 2, y: H * 0.72, vx: 0, vy: 0, tilt: 0,
-      hp: HULL_START, weapon: 'pulse', weaponTime: 0, shield: 0,
+      hp: HULL_START, weapon: 'pulse', weaponLevel: 1, weaponTime: 0, shield: 0,
       invuln: 0, fireTimer: 0, thrust: 0.6
     },
     enemies: [],
@@ -195,7 +308,11 @@ window.SP = window.SP || {};
     nextId: 1
   };
 
-  var input = { keys: {}, pointer: { active: false, x: W / 2, y: H * 0.72 } };
+  var input = {
+    keys: {},
+    pointer: { active: false, id: null, type: 'mouse', x: W / 2, y: H * 0.72, originX: W / 2, originY: H * 0.72 }
+  };
+  var TOUCH_DEVICE = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
 
   var savedShip = readStore(STORE_SHIP);
   var chosenShip = Art.SHIPS.filter(function (s) { return s.id === savedShip; }).length
@@ -253,6 +370,7 @@ window.SP = window.SP || {};
     p.tilt = 0;
     p.hp = HULL_START;
     p.weapon = 'pulse';
+    p.weaponLevel = 1;
     p.weaponTime = 0;
     p.shield = 0;
     p.invuln = 0;
@@ -273,18 +391,30 @@ window.SP = window.SP || {};
     var prevX = p.x;
 
     if (input.pointer.active) {
-      var k = Math.min(1, 15 * dt);
-      p.x += (input.pointer.x - p.x) * k;
-      p.y += (input.pointer.y - p.y) * k;
-      p.vx = 0;
-      p.vy = 0;
+      /* Virtual stick: deflection from where the thumb first landed, mapped
+         to speed. The aircraft keeps its own place on screen, so it never has
+         to sit under a finger to be steered. */
+      var sx = input.pointer.x - input.pointer.originX;
+      var sy = input.pointer.y - input.pointer.originY;
+      var len = Math.sqrt(sx * sx + sy * sy);
+      var strength = len <= STICK_DEAD ? 0 : Math.min(1, (len - STICK_DEAD) / (STICK_MAX - STICK_DEAD));
+      if (strength > 0) {
+        p.vx = (sx / len) * strength * PLAYER_SPEED;
+        p.vy = (sy / len) * strength * PLAYER_SPEED;
+      } else {
+        var stickDamp = Math.max(0, 1 - 9 * dt);
+        p.vx *= stickDamp;
+        p.vy *= stickDamp;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
     } else {
       var ax = (isDown('right') ? 1 : 0) - (isDown('left') ? 1 : 0);
       var ay = (isDown('down') ? 1 : 0) - (isDown('up') ? 1 : 0);
       if (ax || ay) {
-        var len = Math.sqrt(ax * ax + ay * ay);
-        p.vx = (ax / len) * PLAYER_SPEED;
-        p.vy = (ay / len) * PLAYER_SPEED;
+        var len2 = Math.sqrt(ax * ax + ay * ay);
+        p.vx = (ax / len2) * PLAYER_SPEED;
+        p.vy = (ay / len2) * PLAYER_SPEED;
       } else {
         var damp = Math.max(0, 1 - 9 * dt);
         p.vx *= damp;
@@ -303,8 +433,11 @@ window.SP = window.SP || {};
     if (p.weaponTime > 0) {
       p.weaponTime = Math.max(0, p.weaponTime - dt);
       if (p.weaponTime === 0) {
+        var lost = WEAPONS[p.weapon].name;
         p.weapon = 'pulse';
-        showBanner('WEAPON OFFLINE', 'Back to pulse fire');
+        p.weaponLevel = 1;
+        showBanner('WEAPON OFFLINE', lost.toUpperCase() + ' expired - back to pulse');
+        announce(lost + ' expired. Back to Pulse.');
       }
     }
     p.thrust = 0.65 + 0.35 * Math.sin(g.time * 30) + (isDown('up') ? 0.2 : 0);
@@ -312,17 +445,18 @@ window.SP = window.SP || {};
     /* weapons fire on their own */
     p.fireTimer -= dt;
     if (p.fireTimer <= 0) {
-      var w = WEAPONS[p.weapon];
+      var w = weaponStats(p.weapon, p.weaponLevel);
       for (var i = 0; i < w.shots.length; i++) {
         var s = w.shots[i];
         g.bullets.push({
           id: g.nextId++, x: p.x + s[1], y: p.y - 24,
           vx: Math.sin(s[0]) * w.speed, vy: -Math.cos(s[0]) * w.speed,
-          dmg: w.dmg, size: w.size, color: w.color, pierce: w.pierce, hits: []
+          dmg: w.dmg, size: w.size, color: w.color, pierce: w.pierce,
+          beam: w.beam, weapon: p.weapon, hits: []
         });
       }
       p.fireTimer = w.rate;
-      Audio.play(p.weapon === 'laser' ? 'laser' : 'shoot');
+      Audio.play(w.beam ? 'laser' : 'shoot');
     }
   }
 
@@ -364,10 +498,13 @@ window.SP = window.SP || {};
     g.kills = 0;
     g.wave = 1;
     g.wavesCleared = 0;
-    g.won = false;
     g.runTime = 0;
     g.shake = 0;
     g.banner = null;
+    g.touchHint = TOUCH_HINT_TIME;
+    lastWeaponPod = null;
+    g.bossNumber = 0;
+    g.bossesBeaten = 0;
     g.boss = null;
     g.enemies.length = 0;
     g.bullets.length = 0;
@@ -378,13 +515,13 @@ window.SP = window.SP || {};
     resetPlayer();
     startWave(1);
     setState('playing');
-    announce('Run started. Wave 1 of ' + TOTAL_WAVES + '.');
+    announce('Run started. Wave 1. The sky never ends.');
   }
 
   function startWave(n) {
     g.wave = n;
     g.phase = 'wave';
-    var plan = WAVES[n - 1];
+    var plan = wavePlan(n);
     g.spawnLeft = plan.count;
     g.spawnTimer = 0.9;
     g.pickupTimer = rand(6, 10);
@@ -416,31 +553,59 @@ window.SP = window.SP || {};
   }
 
   function spawnEnemy() {
-    var plan = WAVES[g.wave - 1];
+    var plan = wavePlan(g.wave);
     if (Math.random() < plan.fighter) spawnFighter(plan);
     else spawnMeteor(plan);
     g.spawnLeft -= 1;
   }
 
+  /* Weapon pods arrive in runs: after one shows up, the next weapon pod is
+     usually the same one. That is what makes a level-3 weapon reachable —
+     three identical pods in a row by chance is only about one in nine. */
+  var POD_REPEAT_CHANCE = 0.6;
+  var lastWeaponPod = null;
+
   function spawnPickup(kind, x, y) {
     if (!kind) {
       var roll = Math.random();
-      kind = roll < 0.34 ? 'weapon' : roll < 0.56 ? 'shield' : roll < 0.74 ? 'repair' : roll < 0.86 ? 'emp' : 'star';
+      if (roll < 0.32) {
+        kind = lastWeaponPod && Math.random() < POD_REPEAT_CHANCE
+          ? lastWeaponPod
+          : WEAPON_KEYS[randInt(0, 2)];
+        lastWeaponPod = kind;
+      } else {
+        kind = roll < 0.58 ? 'shield' : roll < 0.76 ? 'repair' : roll < 0.88 ? 'emp' : 'star';
+      }
     }
     g.pickups.push({ kind: kind, x: clamp(x, 40, W - 40), y: y, vy: rand(70, 110), t: 0, life: 16 });
   }
 
+  /* A weapon pickup is that exact weapon. Taking the one you are already
+     holding makes it stronger and restarts its clock; taking a different one
+     switches to it at level 1. Either way you get the full 18 seconds. */
+  function collectWeapon(kind, x, y) {
+    var pl = g.player;
+    var same = pl.weapon === kind;
+    var def = WEAPONS[kind];
+
+    pl.weapon = kind;
+    pl.weaponLevel = same ? Math.min(WEAPON_MAX_LEVEL, pl.weaponLevel + 1) : 1;
+    pl.weaponTime = WEAPONS[kind].duration;
+
+    var label = def.name.toUpperCase() + (pl.weaponLevel > 1 ? ' LV' + pl.weaponLevel : '');
+    g.pops.push({ x: x, y: y, text: label, t: 0, color: def.color });
+    burst(x, y, 10, def.color, 130, 2.5);
+    Audio.play('pickup');
+    announce(label + ' equipped for ' + pl.weaponTime + ' seconds. Strength ' + pl.weaponLevel + ' of ' + WEAPON_MAX_LEVEL + '.');
+  }
+
   function collectPickup(p) {
     var pl = g.player;
-    if (p.kind === 'weapon') {
-      var options = WEAPON_KEYS.filter(function (key) { return key !== pl.weapon; });
-      var pick = options[randInt(0, options.length - 1)];
-      pl.weapon = pick;
-      pl.weaponTime = WEAPON_TIME;
-      g.pops.push({ x: p.x, y: p.y, text: WEAPONS[pick].name.toUpperCase(), t: 0, color: '#ff9f43' });
-      Audio.play('pickup');
+    if (WEAPONS[p.kind] && !WEAPONS[p.kind].permanent) {
+      collectWeapon(p.kind, p.x, p.y);
     } else if (p.kind === 'shield') {
       pl.shield = 15;
+      g.pops.push({ x: p.x, y: p.y, text: 'SHIELD', t: 0, color: '#5ad8ff' });
       Audio.play('pickup');
     } else if (p.kind === 'repair') {
       if (pl.hp < HULL_MAX) {
@@ -496,7 +661,7 @@ window.SP = window.SP || {};
   }
 
   function updateWaves(dt) {
-    /* supplies keep drifting in, including during the boss fight */
+    /* supplies keep drifting in for as long as you are airborne */
     g.pickupTimer -= dt;
     if (g.pickupTimer <= 0) {
       g.pickupTimer = rand(8, 13);
@@ -508,17 +673,20 @@ window.SP = window.SP || {};
         g.spawnTimer -= dt;
         if (g.spawnTimer <= 0) {
           spawnEnemy();
-          var plan = WAVES[g.wave - 1];
+          var plan = wavePlan(g.wave);
           g.spawnTimer = rand(plan.gap[0], plan.gap[1]);
         }
       } else if (g.enemies.length === 0) {
+        /* cleared one, straight into the next — except every fifth wave,
+           which brings a Dreadnought with it */
         g.wavesCleared = g.wave;
         var bonus = 150 * g.wave;
         addScore(bonus);
         Audio.play('wave');
         showBanner('WAVE ' + g.wave + ' CLEAR', '+' + bonus + ' points');
-        announce('Wave ' + g.wave + ' cleared. ' + g.wavesCleared + ' of ' + TOTAL_WAVES + '.');
-        if (g.wave >= TOTAL_WAVES) {
+        announce('Wave ' + g.wave + ' cleared. Best so far: wave ' + g.wavesCleared + '.');
+
+        if (g.wave % BOSS_EVERY === 0) {
           g.phase = 'bossIntro';
           g.bossIntroTimer = 2.6;
           showBanner('WARNING', 'Dreadnought inbound');
@@ -535,33 +703,34 @@ window.SP = window.SP || {};
       if (g.bossIntroTimer <= 0) startBoss();
     } else if (g.phase === 'bossDying') {
       g.bossDeathTimer -= dt;
-      if (g.bossDeathTimer <= 0) endRun(true);
+      if (g.bossDeathTimer <= 0) {
+        g.phase = 'gap';
+        g.gapTimer = 2;
+      }
     }
   }
 
   /* ------------------------------------------------------------------ *
-   * boss
+   * the Dreadnought
    * ------------------------------------------------------------------ */
 
   function startBoss() {
     g.phase = 'boss';
+    var plan = bossPlan(g.wave);
+    g.bossNumber += 1;
     g.boss = {
-      id: g.nextId++, x: W / 2, y: -90, w: BOSS.w, h: BOSS.h,
-      hp: BOSS.hp, maxHp: BOSS.hp, t: 0, dir: 1, speed: 105,
-      fire: 2, volley: 0, minion: 5.5, hitFlash: 0, entering: true
+      id: g.nextId++, x: W / 2, y: -90, w: plan.w, h: plan.h,
+      hp: plan.hp, maxHp: plan.hp, t: 0, dir: 1, speed: plan.speed,
+      fire: 2, fireEvery: plan.fireEvery, volley: 0,
+      minion: plan.minionEvery, reward: plan.reward, hitFlash: 0, entering: true
     };
-    showBanner(BOSS.name.toUpperCase(), 'Break it and the sky is yours');
+    showBanner(plan.name.toUpperCase() + ' ' + g.bossNumber, 'Break it. Then keep going.');
     Audio.play('boss');
-    announce('Boss fight. The Dreadnought has arrived.');
+    announce('Boss ' + g.bossNumber + '. The Dreadnought has arrived.');
   }
 
   function bossShot(x, y, angle, speed) {
-    g.shots.push({
-      x: x, y: y,
-      vx: Math.sin(angle) * speed,
-      vy: Math.cos(angle) * speed,
-      r: 6, color: '#ff8c42'
-    });
+    g.shots.push({ x: x, y: y, vx: Math.sin(angle) * speed, vy: Math.cos(angle) * speed, r: 6, color: '#ff8c42' });
   }
 
   function updateBoss(dt) {
@@ -572,7 +741,7 @@ window.SP = window.SP || {};
 
     if (b.entering) {
       b.y += 95 * dt;
-      if (b.y >= BOSS.y) { b.y = BOSS.y; b.entering = false; }
+      if (b.y >= bossPlan(g.wave).y) { b.y = bossPlan(g.wave).y; b.entering = false; }
       return;
     }
 
@@ -596,15 +765,15 @@ window.SP = window.SP || {};
         var aim = Math.atan2(g.player.x - b.x, g.player.y - b.y || 1);
         bossShot(b.x, b.y + 36, aim, 330);
       }
-      b.fire = phase2 ? 1.25 : 1.8;
+      b.fire = b.fireEvery * (phase2 ? 0.7 : 1);
       Audio.play('enemyShoot');
     }
 
     b.minion -= dt;
     if (b.minion <= 0) {
-      b.minion = phase2 ? 5.5 : 7.5;
+      b.minion = b.minionEvery * (phase2 ? 0.75 : 1);
       [-1, 1].forEach(function (side) {
-        spawnFighter(WAVES[TOTAL_WAVES - 1]);
+        spawnFighter(wavePlan(g.wave));
         var m = g.enemies[g.enemies.length - 1];
         m.y = b.y + 30;
         m.x = clamp(b.x + side * (b.w / 2 + 30), 40, W - 40);
@@ -612,7 +781,7 @@ window.SP = window.SP || {};
       });
     }
 
-    /* ramming the boss hurts */
+    /* ramming it hurts */
     if (Math.abs(g.player.x - b.x) < b.w / 2 + 10 && Math.abs(g.player.y - b.y) < b.h / 2 + 12) {
       if (damagePlayer()) g.player.y += 34;
     }
@@ -620,10 +789,12 @@ window.SP = window.SP || {};
     if (b.hp <= 0 && g.phase === 'boss') {
       g.phase = 'bossDying';
       g.bossDeathTimer = 1.8;
-      addScore(3000);
+      g.bossesBeaten += 1;
+      addScore(b.reward);
+      showBanner('DREADNOUGHT DOWN', '+' + formatNumber(b.reward) + ' · wave ' + (g.wave + 1) + ' next');
       Audio.play('bigExplode');
       shake(20);
-      announce('The Dreadnought is going down!');
+      announce('Dreadnought ' + g.bossNumber + ' destroyed. Next wave coming.');
     }
   }
 
@@ -641,6 +812,7 @@ window.SP = window.SP || {};
     }
 
     g.runTime += dt;
+    if (g.touchHint > 0) g.touchHint -= dt;
     if (g.bannerTimer > 0) {
       g.bannerTimer -= dt;
       if (g.bannerTimer <= 0) g.banner = null;
@@ -673,10 +845,16 @@ window.SP = window.SP || {};
       b.y += b.vy * dt;
       if (b.y < -30 || b.x < -30 || b.x > W + 30) { g.bullets.splice(i, 1); continue; }
 
-      if (g.boss && !g.boss.entering && Math.abs(b.x - g.boss.x) < g.boss.w / 2 && Math.abs(b.y - g.boss.y) < g.boss.h / 2) {
-        g.boss.hp -= b.dmg;
-        g.boss.hitFlash = 0.09;
-        burst(b.x, b.y, 3, '#ffd93d', 90, 2);
+      if (g.boss && !g.boss.entering &&
+          Math.abs(b.x - g.boss.x) < g.boss.w / 2 && Math.abs(b.y - g.boss.y) < g.boss.h / 2) {
+        /* a piercing beam must hit the hull once, not once per frame it
+           overlaps — the hull is 86px tall and the beam moves 25px a frame */
+        if (!b.pierce || b.hits.indexOf(g.boss.id) < 0) {
+          g.boss.hp -= b.dmg;
+          g.boss.hitFlash = 0.09;
+          b.hits.push(g.boss.id);
+          burst(b.x, b.y, b.beam ? 10 : 3, b.beam ? b.color : '#ffd93d', b.beam ? 150 : 90, b.beam ? 3 : 2);
+        }
         if (!b.pierce) g.bullets.splice(i, 1);
         continue;
       }
@@ -689,8 +867,9 @@ window.SP = window.SP || {};
         if (dist(b.x, b.y, e.x, e.y) > reach) continue;
 
         e.hp -= b.dmg;
-        e.flash = 0.1;
-        burst(b.x, b.y, 3, b.color, 80, 2);
+        e.flash = b.beam ? 0.16 : 0.1;
+        /* a beam lights up what it burns through */
+        burst(b.x, b.y, b.beam ? 9 : 3, b.beam ? b.color : b.color, b.beam ? 150 : 80, b.beam ? 3 : 2);
         if (b.pierce) { b.hits.push(e.id); continue; }
         g.bullets.splice(i, 1);
         if (e.hp <= 0) killEnemy(e);
@@ -876,7 +1055,11 @@ window.SP = window.SP || {};
     drawBackground();
 
     var i;
-    for (i = 0; i < g.pickups.length; i++) Art.drawPickup(ctx, g.pickups[i]);
+    for (i = 0; i < g.pickups.length; i++) {
+      var pod = g.pickups[i];
+      /* a pod of the weapon already in your hands is an upgrade */
+      Art.drawPickup(ctx, pod, { upgrade: pod.kind === g.player.weapon });
+    }
     for (i = 0; i < g.enemies.length; i++) {
       var e = g.enemies[i];
       if (e.dead) continue;
@@ -889,12 +1072,15 @@ window.SP = window.SP || {};
 
     for (i = 0; i < g.bullets.length; i++) {
       var b = g.bullets[i];
-      ctx.fillStyle = b.color;
-      ctx.shadowColor = b.color;
-      ctx.shadowBlur = 10;
-      Art.helpers.starPath(ctx, b.x, b.y, b.size + 1.6, b.size * 0.4, 4);
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      if (b.beam) drawBeamShot(b);
+      else {
+        ctx.fillStyle = b.color;
+        ctx.shadowColor = b.color;
+        ctx.shadowBlur = 10;
+        Art.helpers.starPath(ctx, b.x, b.y, b.size + 1.6, b.size * 0.4, 4);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
     }
 
     for (i = 0; i < g.shots.length; i++) {
@@ -933,6 +1119,11 @@ window.SP = window.SP || {};
 
     if (g.banner) drawBanner();
 
+    /* the stick sits above the sky but below the banners, so it never hides a
+       hazard the player needs to see */
+    if (g.state === 'playing' && input.pointer.active) drawStick();
+    drawTouchHint();
+
     ctx.restore();
 
     /* edge vignette so the HUD stays readable */
@@ -955,6 +1146,139 @@ window.SP = window.SP || {};
       shield: p.shield > 0,
       time: g.time
     });
+  }
+
+  /* A laser round is a streak of light: a hard white core inside a coloured
+     glow, tapering to nothing at the tail, with a bright head where it is
+     burning through whatever is in front of it. */
+  function drawBeamShot(b) {
+    var head = b.y;
+    var tail = b.y + 190;
+    var w = b.size;
+
+    ctx.save();
+    ctx.lineCap = 'butt';
+
+    /* soft outer glow */
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = b.color;
+    ctx.lineWidth = w * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(b.x, tail);
+    ctx.lineTo(b.x, head);
+    ctx.stroke();
+
+    /* the streak itself, fading out behind the head */
+    var grad = ctx.createLinearGradient(b.x, head, b.x, tail);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.18, b.color);
+    grad.addColorStop(1, rgbaFade(b.color));
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = b.color;
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = Math.max(2, w * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(b.x, head);
+    ctx.lineTo(b.x, tail);
+    ctx.stroke();
+
+    /* hot core */
+    ctx.shadowBlur = 6;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = Math.max(1.2, w * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(b.x, head + 2);
+    ctx.lineTo(b.x, tail * 0.5 + head * 0.5);
+    ctx.stroke();
+
+    /* the burning tip */
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(b.x, head - w * 1.1);
+    ctx.lineTo(b.x + w * 0.42, head + w * 0.5);
+    ctx.lineTo(b.x, head + w * 1.2);
+    ctx.lineTo(b.x - w * 0.42, head + w * 0.5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  /* a transparent version of a hex colour, for streak tails */
+  function rgbaFade(color) {
+    var c = toRgb(color);
+    return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0)';
+  }
+
+  function toRgb(color) {
+    var v = parseInt(String(color).replace('#', ''), 16);
+    return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+  }
+
+  /* The floating stick, drawn where the thumb first landed. Mouse players get
+     no stick drawn — on a desktop it is just a green disc in the way. */
+  function drawStick() {
+    var o = input.pointer;
+    if (!o.active || o.type === 'mouse') return;
+    var dx = clamp(o.x - o.originX, -STICK_MAX, STICK_MAX);
+    var dy = clamp(o.y - o.originY, -STICK_MAX, STICK_MAX);
+
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = '#d8fd71';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(o.originX, o.originY, STICK_MAX, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = '#d8fd71';
+    ctx.beginPath();
+    ctx.arc(o.originX, o.originY, STICK_MAX, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.85;
+    ctx.shadowColor = '#d8fd71';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#d8fd71';
+    ctx.beginPath();
+    ctx.arc(o.originX + dx, o.originY + dy, 24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /* A quiet prompt on touch screens so the stick is discoverable. */
+  function drawTouchHint() {
+    if (!TOUCH_DEVICE || g.touchHint <= 0 || g.state !== 'playing') return;
+    var pulse = 0.5 + 0.5 * Math.sin(g.time * 4);
+    var cx = W / 2;
+    var cy = H * 0.82;
+
+    ctx.save();
+    ctx.globalAlpha = 0.25 + pulse * 0.25;
+    ctx.strokeStyle = '#d8fd71';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 54, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.globalAlpha = 0.5 + pulse * 0.3;
+    ctx.fillStyle = '#d8fd71';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 14 + pulse * 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 20px ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(6,9,24,0.85)';
+    ctx.lineWidth = 5;
+    ctx.strokeText('Drag anywhere to steer', cx, cy + 96);
+    ctx.fillText('Drag anywhere to steer', cx, cy + 96);
+    ctx.restore();
   }
 
   function drawBanner() {
@@ -985,21 +1309,41 @@ window.SP = window.SP || {};
 
   function updateHud() {
     var p = g.player;
+    var w = weaponStats(p.weapon, p.weaponLevel);
+    var permanent = WEAPONS[p.weapon].permanent;
+
     setText(el.hudScore, formatNumber(g.score));
-    setText(el.hudWave, g.wave + '/' + TOTAL_WAVES);
+    setText(el.hudWave, 'Wave ' + g.wave);
     setText(el.hudTime, formatTime(g.runTime));
     setText(el.hudHull, '♥'.repeat(Math.max(0, p.hp)) + '·'.repeat(HULL_MAX - clamp(p.hp, 0, HULL_MAX)));
     el.hudHull.setAttribute('aria-label', 'Hull ' + Math.max(0, p.hp) + ' of ' + HULL_MAX);
 
-    if (p.weaponTime > 0) {
-      el.hudGear.hidden = false;
-      setText(el.hudGear, WEAPONS[p.weapon].name + ' weapon · ' + Math.ceil(p.weaponTime) + 's' +
-        (p.shield > 0 ? ' · shield ' + Math.ceil(p.shield) + 's' : ''));
-    } else if (p.shield > 0) {
-      el.hudGear.hidden = false;
-      setText(el.hudGear, 'Shield ' + Math.ceil(p.shield) + 's');
+    /* active weapon, its strength and how long is left of it */
+    el.hudGear.hidden = false;
+    el.hudGear.dataset.weapon = p.weapon;
+    el.hudGear.dataset.levelled = String(!permanent);
+    el.hudGear.style.setProperty('--weapon', w.color);
+    setText(el.hudWeaponName, w.name.toUpperCase());
+
+    if (permanent) {
+      setText(el.hudWeaponLevel, 'default');
+      setText(el.hudWeaponTime, '');
+      el.hudWeaponBar.hidden = true;
+      el.hudGear.setAttribute('aria-label', 'Pulse, the default weapon. Always available.');
     } else {
-      el.hudGear.hidden = true;
+      setText(el.hudWeaponLevel, 'LV ' + p.weaponLevel);
+      setText(el.hudWeaponTime, Math.ceil(p.weaponTime) + 's');
+      el.hudWeaponBar.hidden = false;
+      el.hudWeaponFill.style.width = clamp((p.weaponTime / Math.max(1, w.duration)) * 100, 0, 100) + '%';
+      el.hudGear.setAttribute('aria-label',
+        w.name + ' at level ' + p.weaponLevel + ' of ' + WEAPON_MAX_LEVEL + ', ' + Math.ceil(p.weaponTime) + ' seconds left.');
+    }
+
+    if (p.shield > 0) {
+      el.hudShield.hidden = false;
+      setText(el.hudShieldTime, Math.ceil(p.shield) + 's');
+    } else {
+      el.hudShield.hidden = true;
     }
 
     if (g.boss && g.phase !== 'menu') {
@@ -1019,7 +1363,7 @@ window.SP = window.SP || {};
     var playing = next === 'playing';
     el.screens.menu.hidden = next !== 'menu';
     el.screens.pause.hidden = next !== 'paused';
-    el.screens.end.hidden = next !== 'gameover' && next !== 'victory';
+    el.screens.end.hidden = next !== 'gameover';
     el.hud.hidden = !(playing || next === 'paused');
     el.btnPause.hidden = !playing;
     document.body.dataset.state = next;
@@ -1035,10 +1379,18 @@ window.SP = window.SP || {};
     }
   }
 
+  /* Let go of the stick completely. The captured pointer id has to go too, or
+     the next touch — which always has a new id — would be ignored. */
+  function resetStick() {
+    input.pointer.active = false;
+    input.pointer.id = null;
+    input.pointer.type = 'mouse';
+  }
+
   function pause() {
     if (g.state !== 'playing') return;
     input.keys = {};
-    input.pointer.active = false;
+    resetStick();
     setState('paused');
     announce('Paused.');
   }
@@ -1049,28 +1401,31 @@ window.SP = window.SP || {};
     announce('Back in the sky.');
   }
 
-  function endRun(won) {
+  /* There is no winning. A run ends when the hull does, and the only question
+     is how far you got. */
+  function endRun() {
     if (g.state !== 'playing') return;
-    g.won = won;
     input.keys = {};
-    input.pointer.active = false;
+    resetStick();
 
-    setText(el.endEyebrow, won ? 'Victory' : 'Run over');
-    setText(el.titleEnd, won ? 'Boss defeated' : 'Shot down');
-    setText(el.endSub, won
-      ? 'The Dreadnought is scrap. That is every wave handled.'
-      : 'You got to wave ' + g.wave + ' of ' + TOTAL_WAVES + '. Tighten up and go again.');
+    var deep = g.wavesCleared;
+    setText(el.endEyebrow, deep >= 10 ? 'Deep run' : 'Run over');
+    setText(el.titleEnd, 'Shot down');
+    setText(el.endSub, deep === 0
+      ? 'You did not clear a wave. Tighten up and go again.'
+      : 'You cleared wave ' + deep + ' and took down ' + g.bossesBeaten +
+        ' Dreadnought' + (g.bossesBeaten === 1 ? '' : 's') + '. The sky only gets harder.');
     setText(el.endScore, formatNumber(g.score));
-    setText(el.endWaves, g.wavesCleared + ' / ' + TOTAL_WAVES);
-    setText(el.endBoss, won ? 'Yes' : 'No');
+    setText(el.endWaves, String(deep));
+    setText(el.endBosses, String(g.bossesBeaten));
     setText(el.endTime, formatTime(g.runTime));
     setText(el.endKills, formatNumber(g.kills));
     el.endSave.textContent = StartNG.identity.status === 'loading' ? 'Checking your start.ng account…' : 'Saving this run…';
     el.endSave.removeAttribute('data-tone');
 
-    setState(won ? 'victory' : 'gameover');
-    Audio.play(won ? 'victory' : 'gameover');
-    announce(won ? 'Victory! You beat the Dreadnought.' : 'Run over. Score ' + formatNumber(g.score) + '.');
+    setState('gameover');
+    Audio.play('gameover');
+    announce('Run over. Score ' + formatNumber(g.score) + ', ' + deep + ' waves cleared.');
     saveRun();
   }
 
@@ -1079,11 +1434,11 @@ window.SP = window.SP || {};
    * ------------------------------------------------------------------ */
 
   function saveRun() {
-    /* Whole numbers only, and exactly the four declared columns. */
+    /* Whole numbers only, and exactly the declared columns. */
     var stats = {
-      boss: g.won ? 1 : 0,
       score: Math.max(0, Math.round(g.score)),
       waves: Math.max(0, Math.round(g.wavesCleared)),
+      kills: Math.max(0, Math.round(g.kills)),
       time: Math.max(1, Math.round(g.runTime))
     };
 
@@ -1113,7 +1468,7 @@ window.SP = window.SP || {};
         return;
       }
       el.boardNote.textContent = res.entries.length
-        ? 'Best runs on start.ng — boss first, then score, waves and time.'
+        ? 'Best runs on start.ng — score first, then waves, shootdowns and time.'
         : 'No signed-in runs yet. Be the first.';
 
       el.boardRows.replaceChildren.apply(el.boardRows, res.entries.map(boardRow));
@@ -1136,9 +1491,9 @@ window.SP = window.SP || {};
     var cells = [
       entry.rank,
       entry.name || 'Pilot',
-      s.boss ? '✓' : '—',
       formatNumber(s.score || entry.score || 0),
       String(s.waves == null ? '—' : s.waves),
+      formatNumber(s.kills == null ? 0 : s.kills),
       s.time == null ? '—' : formatTime(s.time)
     ];
 
@@ -1287,15 +1642,27 @@ window.SP = window.SP || {};
 
   function pointerToGame(e) {
     var rect = canvas.getBoundingClientRect();
-    input.pointer.x = clamp((e.clientX - rect.left - view.offX) / view.scale, 10, W - 10);
-    input.pointer.y = clamp((e.clientY - rect.top - view.offY) / view.scale, PLAYER_MIN_Y, H - 20);
+    input.pointer.x = clamp((e.clientX - rect.left - view.offX) / view.scale, 0, W);
+    input.pointer.y = clamp((e.clientY - rect.top - view.offY) / view.scale, 0, H);
   }
 
+  /* Where the thumb lands becomes the centre of a floating stick, so players
+     can rest it low in the frame and still steer the aircraft above it. */
   function onPointerDown(e) {
     Audio.unlock();
     if (g.state !== 'playing') return;
-    input.pointer.active = true;
+    if (input.pointer.id !== null && input.pointer.id !== e.pointerId) return;
+
     pointerToGame(e);
+    input.pointer.active = true;
+    input.pointer.id = e.pointerId;
+    input.pointer.type = e.pointerType || 'mouse';
+    input.pointer.originX = clamp(input.pointer.x, 56, W - 56);
+    input.pointer.originY = clamp(input.pointer.y, H * 0.3, H - 56);
+    input.pointer.x = input.pointer.originX;
+    input.pointer.y = input.pointer.originY;
+    if (input.pointer.type !== 'mouse') g.touchHint = 0;
+
     if (canvas.setPointerCapture) {
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
     }
@@ -1303,12 +1670,20 @@ window.SP = window.SP || {};
   }
 
   function onPointerMove(e) {
-    if (!input.pointer.active) return;
+    if (!input.pointer.active || (input.pointer.id !== null && input.pointer.id !== e.pointerId)) return;
     pointerToGame(e);
     e.preventDefault();
   }
 
-  function onPointerUp() { input.pointer.active = false; }
+  function onPointerUp(e) {
+    if (input.pointer.id !== null && e.pointerId !== undefined && e.pointerId !== input.pointer.id) return;
+    var wasTouch = e.pointerType !== 'mouse';
+    resetStick();
+    if (wasTouch) {
+      input.pointer.x = input.pointer.originX;
+      input.pointer.y = input.pointer.originY;
+    }
+  }
 
   function onKeyDown(e) {
     Audio.unlock();
@@ -1342,9 +1717,9 @@ window.SP = window.SP || {};
     if ((e.code === 'Enter' || e.code === 'Space') && !e.repeat) {
       if (g.state === 'menu') { e.preventDefault(); Audio.play('ui'); startRun(); }
       else if (g.state === 'paused') { e.preventDefault(); resume(); }
-      else if (g.state === 'gameover' || g.state === 'victory') { e.preventDefault(); startRun(); }
+      else if (g.state === 'gameover') { e.preventDefault(); startRun(); }
     }
-    if (e.code === 'KeyR' && (g.state === 'gameover' || g.state === 'victory')) startRun();
+    if (e.code === 'KeyR' && g.state === 'gameover') startRun();
   }
 
   function onKeyUp(e) { input.keys[e.code] = false; }
@@ -1391,7 +1766,7 @@ window.SP = window.SP || {};
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', function () { input.keys = {}; input.pointer.active = false; });
+    window.addEventListener('blur', function () { input.keys = {}; resetStick(); });
     window.addEventListener('resize', resize);
     if (window.matchMedia) {
       var mq = window.matchMedia('(min-width: 1024px)');

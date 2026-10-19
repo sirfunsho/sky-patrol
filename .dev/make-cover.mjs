@@ -257,13 +257,47 @@ disc(168, 736, 24, '#8a7668');
 disc(160, 730, 7, '#000000', 0.18, 5);
 disc(1476, 496, 20, '#8a7668');
 
+// the three weapon pods, so the card shows what the game is about
+function pod(cx, cy, color, icon) {
+  disc(cx, cy, 30, '#0b1024', 0.9);
+  disc(cx, cy, 30, color, 0.18, 16);
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    disc(cx + Math.cos(a) * 31, cy + Math.sin(a) * 31, 1.6, color, 0.9);
+  }
+  if (icon === 'fan') {
+    for (const dx of [-14, -7, 0, 7, 14]) {
+      for (let t = -16; t <= 16; t += 8) disc(cx + dx * 0.6 + dx * t * 0.06, cy + t, 2.4, color, 0.95);
+    }
+  } else if (icon === 'stream') {
+    for (const dy of [-12, 0, 12]) for (let t = -15; t <= 15; t += 7.5) disc(cx + t, cy + dy, 2.6, color, 0.95);
+  } else {
+    rect(cx - 4, cy - 20, 8, 40, color, 0.35);
+    rect(cx - 2, cy - 20, 4, 40, color, 1);
+    rect(cx - 1, cy - 20, 2, 40, '#ffffff', 1);
+  }
+}
+pod(214, 512, '#ff8a3d', 'fan');
+pod(384, 452, '#a6ff7e', 'stream');
+pod(554, 512, '#ff5cf0', 'beam');
+
+// what each weapon looks like in flight
+for (const dx of [-96, -72, -48, -24, 0, 24, 48, 72, 96]) {
+  disc(1180 + dx, 528 - Math.abs(dx) * 0.18, 7, '#ff8a3d', 0.95);
+  disc(1180 + dx, 528 - Math.abs(dx) * 0.18, 3, '#ffffff', 0.9);
+}
+for (let i = 0; i < 5; i++) disc(1180, 574 - i * 42, 6, '#a6ff7e', 0.95);
+rect(1174, 452, 12, 150, '#ff5cf0', 0.3);
+rect(1177, 452, 6, 150, '#ff5cf0', 0.95);
+rect(1179, 452, 2, 150, '#ffffff', 1);
+
 // title
 const titleScale = 20;
 text('SKY PATROL', (W - textWidth('SKY PATROL', titleScale)) / 2, 180, titleScale, '#ffffff', '#0a0e22', 4);
 const subScale = 6;
 text('START.NG ARCADE SHOOTER', (W - textWidth('START.NG ARCADE SHOOTER', subScale)) / 2, 340, subScale, '#d8fd71', '#0a0e22', 3);
 const tagScale = 5;
-text('5 WAVES - 1 BOSS - PICK YOUR SHIP', (W - textWidth('5 WAVES - 1 BOSS - PICK YOUR SHIP', tagScale)) / 2, 402, tagScale, '#a9b4d8', '#0a0e22', 2);
+text('ENDLESS SKY - HOW FAR CAN YOU GET', (W - textWidth('ENDLESS SKY - HOW FAR CAN YOU GET', tagScale)) / 2, 402, tagScale, '#a9b4d8', '#0a0e22', 2);
 
 /* ------------------------------------------------------------------ *
  * png encoding

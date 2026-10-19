@@ -136,14 +136,81 @@ body {
 .pill b { font-variant-numeric: tabular-nums; }
 
 .hud__gear {
+  --weapon: #7ef7ff;
+  position: relative;
+  margin: 0;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 12px;
+  background: rgba(8, 12, 30, 0.68);
+  border: 1px solid rgba(126, 200, 255, 0.4);
+  border: 1px solid color-mix(in srgb, var(--weapon) 55%, transparent);
+  color: var(--ink);
+  font-size: 0.9em;
+  min-width: 168px;
+}
+
+.gear__dot {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--weapon);
+  box-shadow: 0 0 10px var(--weapon);
+}
+
+.hud__gear b {
+  letter-spacing: 0.1em;
+  font-size: 1.02em;
+}
+
+.gear__level,
+.gear__time {
+  font-size: 0.85em;
+  color: var(--weapon);
+  font-variant-numeric: tabular-nums;
+}
+
+.gear__level::before { content: ''; }
+
+.hud__gear[data-levelled="false"] .gear__level {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75em;
+}
+
+.gear__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.gear__bar i {
+  display: block;
+  height: 100%;
+  background: var(--weapon);
+  box-shadow: 0 0 8px var(--weapon);
+  transition: width 120ms linear;
+}
+
+.hud__shield {
   margin: 0;
   align-self: flex-start;
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(8, 12, 30, 0.62);
-  border: 1px solid rgba(216, 253, 113, 0.4);
+  border: 1px solid rgba(90, 216, 255, 0.45);
+  color: #5ad8ff;
   font-size: 0.85em;
-  color: var(--accent);
 }
 
 .hud__boss { margin-top: 2px; max-width: 70%; }
@@ -451,7 +518,9 @@ kbd {
   font-size: 0.95em;
   color: #0c1124;
 }
-.tag--weapon { background: #ff9f43; }
+.tag--spread { background: #ff8a3d; }
+.tag--rapid { background: #a6ff7e; }
+.tag--laser { background: #ff5cf0; color: #fff; }
 .tag--shield { background: #5ad8ff; }
 .tag--repair { background: #7cf07c; }
 .tag--emp { background: #c58cff; }
