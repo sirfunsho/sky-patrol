@@ -38,8 +38,14 @@ window.SP = window.SP || {};
      aircraft, so a thumb resting low in the frame leaves it in plain sight. */
   var STICK_MAX = 120;
   var STICK_DEAD = 12;
-  var STICK_SMOOTH = 0.05;
-  var MOVE_TAU = 0.07;
+  /* A plain low-pass filter has to choose between a shaky aircraft and a
+     laggy one. A One Euro filter chooses per frame instead: heavy smoothing
+     when the thumb is nearly still, almost none when it is moving fast, so
+     holding still is rock solid while a flick still lands immediately. */
+  var STICK_CUTOFF = 1.1;
+  var STICK_RATE_CUTOFF = 1.1;
+  var STICK_BETA = 0.05;
+  var MOVE_TAU = 0.04;
   var TOUCH_HINT_TIME = 5;
 
   /* `shots` is a fan of [angle, xOffset] pairs; `levels` are indexed by
@@ -336,8 +342,8 @@ window.SP = window.SP || {};
 
   var input = {
     keys: {},
-    stickX: 0,
-    stickY: 0,
+    stickX: newStickFilter(),
+    stickY: newStickFilter(),
     pointer: { active: false, id: null, type: 'mouse', held: 0, x: W / 2, y: H * 0.72, originX: W / 2, originY: H / 2 }
   };
   var TOUCH_DEVICE = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
@@ -414,6 +420,27 @@ window.SP = window.SP || {};
     return !!(k.ArrowDown || k.KeyS);
   }
 
+  function oneEuro(f, value, dt) {
+    var rate = value - f.prev;
+    f.prev = value;
+    var aRate = filterAlpha(STICK_RATE_CUTOFF, dt);
+    f.rate += aRate * (rate - f.rate);
+
+    var cutoff = STICK_CUTOFF + STICK_BETA * Math.abs(f.rate);
+    var a = filterAlpha(cutoff, dt);
+    f.value += a * (value - f.value);
+    return f.value;
+  }
+
+  function filterAlpha(cutoff, dt) {
+    var tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / dt);
+  }
+
+  function newStickFilter() {
+    return { prev: 0, value: 0, rate: 0 };
+  }
+
   function updatePlayer(dt) {
     var p = g.player;
     var prevX = p.x;
@@ -423,19 +450,17 @@ window.SP = window.SP || {};
     if (input.pointer.active) {
       /* Virtual stick: deflection from where the thumb first landed, mapped to
          speed. The aircraft keeps its own place on screen, so it never has to
-         sit under a finger to be steered. The raw touch is smoothed first —
-         a thumb always trembles a little, and unsmoothed that tremble shakes
-         the whole aircraft. */
+         sit under a finger to be steered. */
       var rawX = input.pointer.x - input.pointer.originX;
       var rawY = input.pointer.y - input.pointer.originY;
-      input.stickX += (rawX - input.stickX) * (1 - Math.exp(-dt / STICK_SMOOTH));
-      input.stickY += (rawY - input.stickY) * (1 - Math.exp(-dt / STICK_SMOOTH));
+      var stickX = oneEuro(input.stickX, rawX, dt);
+      var stickY = oneEuro(input.stickY, rawY, dt);
 
-      var len = Math.sqrt(input.stickX * input.stickX + input.stickY * input.stickY);
+      var len = Math.sqrt(stickX * stickX + stickY * stickY);
       var strength = len <= STICK_DEAD ? 0 : Math.min(1, (len - STICK_DEAD) / (STICK_MAX - STICK_DEAD));
       if (strength > 0) {
-        targetVx = (input.stickX / len) * strength * PLAYER_SPEED;
-        targetVy = (input.stickY / len) * strength * PLAYER_SPEED;
+        targetVx = (stickX / len) * strength * PLAYER_SPEED;
+        targetVy = (stickY / len) * strength * PLAYER_SPEED;
       }
     } else {
       var ax = (isDown('right') ? 1 : 0) - (isDown('left') ? 1 : 0);
@@ -1117,24 +1142,32 @@ window.SP = window.SP || {};
       var b = g.bullets[i];
       if (b.beam) drawBeamShot(b);
       else {
+        /* a soft disc under the star, rather than a canvas shadow. Shadow blur
+           is one of the most expensive things you can ask a mobile GPU to do,
+           and this fires once per round, several times a frame. */
+        ctx.globalAlpha = 0.28;
         ctx.fillStyle = b.color;
-        ctx.shadowColor = b.color;
-        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.size + 3.4, 0, 6.2832);
+        ctx.fill();
+        ctx.globalAlpha = 1;
         Art.helpers.starPath(ctx, b.x, b.y, b.size + 1.6, b.size * 0.4, 4);
         ctx.fill();
-        ctx.shadowBlur = 0;
       }
     }
 
     for (i = 0; i < g.shots.length; i++) {
       var s = g.shots[i];
+      ctx.globalAlpha = 0.3;
       ctx.fillStyle = s.color;
-      ctx.shadowColor = s.color;
-      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r + 3.4, 0, 6.2832);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#fff8ec';
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, 6.2832);
       ctx.fill();
-      ctx.shadowBlur = 0;
     }
 
     for (i = 0; i < g.parts.length; i++) {
@@ -1431,8 +1464,8 @@ window.SP = window.SP || {};
     input.pointer.id = null;
     input.pointer.type = 'mouse';
     input.pointer.held = 0;
-    input.stickX = 0;
-    input.stickY = 0;
+    input.stickX = newStickFilter();
+    input.stickY = newStickFilter();
   }
 
   function pause() {

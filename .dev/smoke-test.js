@@ -403,6 +403,7 @@ check('it is counted as beaten', g.bossesBeaten === beatenBefore + 1,
     g.player.vy = 0;
     var firstFrame = 0;
     var peak = 0;
+    var series = [];
     for (var mv = 0; mv < 40; mv++) {
       d.input.keys.ArrowRight = true;
       g.player.invuln = 99999;
@@ -410,6 +411,11 @@ check('it is counted as beaten', g.bossesBeaten === beatenBefore + 1,
       d.update(1 / 60);
       if (mv === 0) firstFrame = g.player.vx;
       peak = g.player.vx;
+      series.push(g.player.vx);
+    }
+    var msTo90 = null;
+    for (var si = 0; si < series.length; si++) {
+      if (series[si] >= peak * 0.9) { msTo90 = Math.round(si * 1000 / 60); break; }
     }
     d.input.keys = {};
     var coast = [];
@@ -419,7 +425,7 @@ check('it is counted as beaten', g.bossesBeaten === beatenBefore + 1,
       coast.push(Math.abs(g.player.vx));
     }
     d.input.keys = {};
-    return { firstFrame: firstFrame, peak: peak, coast: coast };
+    return { firstFrame: firstFrame, peak: peak, coast: coast, msTo90: msTo90 };
   }
   var ramp = rampTest();
   check('movement eases in rather than snapping to full speed',
@@ -428,6 +434,12 @@ check('it is counted as beaten', g.bossesBeaten === beatenBefore + 1,
   check('the aircraft coasts to a stop instead of halting dead',
     ramp.coast[0] > ramp.peak * 0.5 && ramp.coast[ramp.coast.length - 1] < ramp.peak * 0.02,
     Math.round(ramp.peak) + ' px/s down to ' + Math.round(ramp.coast[ramp.coast.length - 1]));
+
+  /* Latency is the thing that made the controls feel broken, and it is easy to
+     trade away silently by reaching for more smoothing. Cap it. */
+  check('the controls stay responsive, smoothing costs no real latency',
+    ramp.msTo90 !== null && ramp.msTo90 <= 120,
+    '90% of full speed within ' + (ramp.msTo90 === null ? 'never' : ramp.msTo90 + 'ms'));
 
   takeWeapon('rapid');
   var rapidL1 = boltsInVolley()[0];
