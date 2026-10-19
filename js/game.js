@@ -1988,6 +1988,10 @@ window.SP = window.SP || {};
     window.addEventListener('focus', function () {
       StartNG.refresh().then(renderIdentity);
     });
+    /* A session can arrive in the address without the page reloading. */
+    window.addEventListener('hashchange', function () {
+      StartNG.watchHash().then(renderIdentity);
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

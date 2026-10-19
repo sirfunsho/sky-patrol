@@ -290,6 +290,17 @@ window.SP = window.SP || {};
     return 'https://start.ng/?return_to=' + encodeURIComponent(location.origin + location.pathname);
   }
 
+  /* The address can pick up a session without the page reloading — start.ng
+     can send the player back to a tab that already had the game open. */
+  function watchHash() {
+    var found = readSession();
+    if (found && found !== session) {
+      session = found;
+      return refresh();
+    }
+    return Promise.resolve(identity);
+  }
+
   SP.StartNG = {
     identity: identity,
     statKeys: STAT_KEYS,
@@ -297,6 +308,7 @@ window.SP = window.SP || {};
     saveRun: saveRun,
     leaderboard: leaderboard,
     signInUrl: signInUrl,
+    watchHash: watchHash,
     onChange: function (fn) { listeners.push(fn); },
     /* True when the player holds a session from a sign-in redirect. */
     hasSession: function () { return !!session; },
